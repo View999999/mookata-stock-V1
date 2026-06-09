@@ -14,24 +14,30 @@ export function prevKey(dateKey, sortedAsc) {
   const idx = sortedAsc.indexOf(dateKey)
   return idx > 0 ? sortedAsc[idx-1] : null
 }
-export function buildMsg(type, zoneId, products, zones, history, todayKeyVal) {
+export function buildMsg(type, zoneIds, products, zones, history, todayKeyVal, senderName) {
   const dateStr = todayStr()
+  const now = new Date()
+  const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
   const labels = { morning:"สั่งรอบเช้า", close:"ปิดร้าน", used:"ยอดใช้ไปจริง", order:"รายการสั่งของ" }
-  let msg = `📦 รายงานสต็อก (${labels[type]||type})\n📅 ${dateStr}\n`
-  const zlist = zoneId==="all" ? zones : zones.filter(z=>z.id===zoneId)
+  const sender = senderName ? `👤 ส่งโดย: ${senderName}` : ""
+
+  // zoneIds = "all" or array of zone ids
+  const zoneFilter = zoneIds === "all" ? zones : zones.filter(z => zoneIds.includes(z.id))
+
+  let msg = `📦 รายงานสต็อก (${labels[type]||type})\n📅 ${dateStr} ⏰ ${timeStr}\n`
+  if (sender) msg += `${sender}\n`
+  msg += `──────────────\n`
 
   if (type === "used") {
-    const pdk = (() => {
-      const sorted = [...new Set(history.map(h=>h.dateKey))].sort()
-      const idx = sorted.indexOf(todayKeyVal)
-      return idx > 0 ? sorted[idx-1] : null
-    })()
+    const sorted = [...new Set(history.map(h=>h.dateKey))].sort()
+    const idx = sorted.indexOf(todayKeyVal)
+    const pdk = idx > 0 ? sorted[idx-1] : null
     const todayRecs = history.filter(h=>h.dateKey===todayKeyVal)
     const prevRecs  = pdk ? history.filter(h=>h.dateKey===pdk) : []
     const mRec  = todayRecs.find(h=>h.round==="morning")
     const cRec  = todayRecs.find(h=>h.round==="close")
     const pcRec = prevRecs.find(h=>h.round==="close")
-    zlist.forEach(z => {
+    zoneFilter.forEach(z => {
       const zp = products.filter(p=>p.zone===z.id)
       if (!zp.length) return
       msg += `\n🏷 ${z.name}\n`
@@ -49,14 +55,14 @@ export function buildMsg(type, zoneId, products, zones, history, todayKeyVal) {
   } else if (type === "order") {
     const hasOrder = products.some(p=>p.order>0)
     if (!hasOrder) { msg += "\n(ยังไม่มีรายการสั่ง)" }
-    else zlist.forEach(z => {
+    else zoneFilter.forEach(z => {
       const zp = products.filter(p=>p.zone===z.id&&p.order>0)
       if (!zp.length) return
       msg += `\n🏷 ${z.name}\n`
       zp.forEach(p => { msg += `🛒 ${p.name}: สั่ง ${p.order} ${p.unit} (${p.shop})\n` })
     })
   } else {
-    zlist.forEach(z => {
+    zoneFilter.forEach(z => {
       const zp = products.filter(p=>p.zone===z.id)
       if (!zp.length) return
       msg += `\n🏷 ${z.name}\n`
@@ -65,7 +71,8 @@ export function buildMsg(type, zoneId, products, zones, history, todayKeyVal) {
         msg += `${val===0?"🔴":val<p.min?"🟡":"🟢"} ${p.name}: ${val} ${p.unit}\n`
       })
     })
-    const low = products.filter(p=>(zoneId==="all"||p.zone===zoneId)&&(p[type]||0)<p.min)
+    const filteredProds = zoneIds==="all" ? products : products.filter(p=>zoneIds.includes(p.zone))
+    const low = filteredProds.filter(p=>(p[type]||0)<p.min)
     if (low.length) msg += `\n⚠️ ต้องสั่งด่วน: ${low.map(p=>p.name).join(", ")}`
   }
   return msg

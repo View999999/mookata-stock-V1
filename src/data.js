@@ -30,14 +30,16 @@ export const DEFAULT_PRODUCTS = [
   { id:14, name:"ถุงมือ",      zone:"z5", unit:"คู่",      min:50, cost:3,   morning:0, close:0, order:0, shop:"โลตัส"     },
 ]
 
-// localStorage helpers
 const K = {
-  products: "mk_products",
-  zones:    "mk_zones",
-  shops:    "mk_shops",
-  history:  "mk_history",
-  token:    "mk_token",
-  nextId:   "mk_nextid",
+  products:   "mk_products",
+  zones:      "mk_zones",
+  shops:      "mk_shops",
+  history:    "mk_history",
+  token:      "mk_line_channel_token",
+  groupIds:   "mk_line_group_ids",
+  staff:      "mk_staff",
+  activeStaff:"mk_active_staff",
+  nextId:     "mk_nextid",
 }
 
 export function loadAll() {
@@ -50,6 +52,9 @@ export function loadAll() {
     shops:    get(K.shops,    DEFAULT_SHOPS),
     history:  get(K.history,  []),
     token:    get(K.token,    ""),
+    groupIds: get(K.groupIds, []),
+    staff:    get(K.staff,    []),
+    activeStaff: get(K.activeStaff, ""),
     nextId:   get(K.nextId,   100),
   }
 }
@@ -59,6 +64,9 @@ export const persist = {
   zones:    (v) => localStorage.setItem(K.zones,    JSON.stringify(v)),
   shops:    (v) => localStorage.setItem(K.shops,    JSON.stringify(v)),
   history:  (v) => localStorage.setItem(K.history,  JSON.stringify(v)),
-  token:    (v) => localStorage.setItem(K.token,    JSON.stringify(v)),
+  token:      (v) => localStorage.setItem(K.token,      JSON.stringify(v)),
+  groupIds:   (v) => localStorage.setItem(K.groupIds,   JSON.stringify(v)),
+  staff:      (v) => localStorage.setItem(K.staff,      JSON.stringify(v)),
+  activeStaff:(v) => localStorage.setItem(K.activeStaff,JSON.stringify(v)),
   nextId:   (v) => localStorage.setItem(K.nextId,   JSON.stringify(v)),
 }
