@@ -43,6 +43,9 @@ export default function App() {
   const [sumDate, setSumDate] = useState(null)
   const [sumZone, setSumZone] = useState("all")
   const [toast, setToast]     = useState(null)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewMsg, setPreviewMsg]   = useState("")
+  const [orderZFilter, setOrderZFilter] = useState("all")
   const [showToken, setShowToken] = useState(false)
   const [tokenInput, setTokenInput] = useState("")
 
@@ -52,6 +55,7 @@ export default function App() {
   const [newStaffName, setNewStaffName] = useState("")
   const [newGName, setNewGName] = useState("")
   const [newGId, setNewGId]   = useState("")
+  const [newGTypes, setNewGTypes] = useState(["morning","close","order","all"])
   const [npName, setNpName]   = useState("")
   const [npZone, setNpZone]   = useState("z0")
   const [npUnit, setNpUnit]   = useState("")
@@ -78,8 +82,8 @@ export default function App() {
     setNextIdR(d.nextId); setLoaded(true)
   }, [])
 
-  const showToast = (msg, color=C.green) => {
-    setToast({msg,color}); setTimeout(()=>setToast(null),2600)
+  const showToast = (msg, color=C.green, big=false) => {
+    setToast({msg,color,big}); setTimeout(()=>setToast(null), big?3500:2600)
   }
 
   const toggleAuth = () => {
@@ -104,6 +108,13 @@ export default function App() {
     setShowLinePanel(true)
   }
 
+  const buildPreview = (selZones, selStaff) => {
+    const msgType = tab==="order" ? "order" : round
+    const dk = todayKey()
+    const fakeHistory = [...history]
+    return buildMsg(msgType, selZones, products, zones, fakeHistory, dk, selStaff)
+  }
+
   // Send LINE
   const doSend = async () => {
     if (!lineSelStaff) { showToast("⚠️ เลือกชื่อพนักงานก่อน",C.orange); return }
@@ -121,16 +132,21 @@ export default function App() {
     const next = [entry,...history.filter(h=>!(h.dateKey===dk&&h.round===round))].slice(0,300)
     setHistory(next)
     apiSaveStock({round,products,zones})
-    // Build and send message
+    // Build and send message — กรองกลุ่มตาม msgType ที่แต่ละกลุ่มรับ
     const msgType = tab==="order" ? "order" : round
     const message = buildMsg(msgType, lineSelZones, products, zones, next, dk, lineSelStaff)
-    const gids = groupIds.map(g=>g.groupId).filter(Boolean)
-    await apiSendLine(message, lineToken, groupIds)
+    // กรองเฉพาะกลุ่มที่รับ msgType นี้ หรือรับ "all"
+    const targetGroups = groupIds.filter(g => {
+      const types = g.types || ["all"]
+      return types.includes("all") || types.includes(msgType)
+    })
+    await apiSendLine(message, lineToken, targetGroups)
     // Reset all values
     resetAll()
     setSending(false)
     setShowLinePanel(false)
-    showToast(`📲 ส่ง LINE แล้ว! (${lineSelStaff})`)
+    setShowPreview(false)
+    showToast(`✅ ส่ง LINE สำเร็จแล้ว! (${lineSelStaff})`, C.green, true)
     setActiveStaff(lineSelStaff)
   }
 
@@ -199,12 +215,27 @@ export default function App() {
 
       {/* Toast */}
       {toast&&(
-        <div style={{position:"fixed",top:16,left:"50%",zIndex:999,transform:"translateX(-50%)",
-          background:"#fff",border:`2px solid ${toast.color}`,color:toast.color,
-          padding:"12px 24px",borderRadius:16,fontSize:15,fontWeight:700,
-          boxShadow:`0 4px 20px ${toast.color}33`,whiteSpace:"nowrap"}}>
-          {toast.msg}
-        </div>
+        toast.big ? (
+          <div style={{position:"fixed",inset:0,zIndex:1500,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(0,0,0,0.55)",flexDirection:"column",gap:16}}
+            onClick={()=>setToast(null)}>
+            <div style={{background:"#fff",border:`4px solid ${toast.color}`,color:toast.color,
+              padding:"36px 48px",borderRadius:28,fontSize:28,fontWeight:900,
+              textAlign:"center",maxWidth:320,lineHeight:1.4,
+              boxShadow:`0 8px 40px ${toast.color}55`}}>
+              {toast.msg}
+            </div>
+            <div style={{color:"#fff",fontSize:14,opacity:0.8}}>แตะเพื่อปิด</div>
+          </div>
+        ) : (
+          <div style={{position:"fixed",top:16,left:"50%",zIndex:999,transform:"translateX(-50%)",
+            background:"#fff",border:`2px solid ${toast.color}`,color:toast.color,
+            padding:"12px 24px",borderRadius:16,fontSize:15,fontWeight:700,
+            boxShadow:`0 4px 20px ${toast.color}33`,whiteSpace:"nowrap"}}>
+            {toast.msg}
+          </div>
+        )
       )}
 
       {/* ── LINE Panel ── */}
@@ -281,14 +312,72 @@ export default function App() {
               </div>
             </div>
 
-            <button onClick={doSend}
-              disabled={!lineReady||sending||!lineSelStaff||lineSelZones.length===0}
+            <button onClick={()=>{
+                if (!lineSelStaff) { showToast("⚠️ เลือกชื่อพนักงานก่อน",C.orange); return }
+                if (lineSelZones.length===0) { showToast("⚠️ เลือกโซนอย่างน้อย 1 โซน",C.orange); return }
+                setPreviewMsg(buildPreview(lineSelZones, lineSelStaff))
+                setShowPreview(true)
+              }}
+              disabled={!lineReady||!lineSelStaff||lineSelZones.length===0}
               style={{width:"100%",padding:"15px",borderRadius:14,border:"none",
                 fontSize:17,fontWeight:800,
-                cursor:lineReady&&!sending&&lineSelStaff&&lineSelZones.length>0?"pointer":"not-allowed",
-                background:lineReady&&!sending&&lineSelStaff&&lineSelZones.length>0?C.line:"#ccc",
-                color:"#fff",opacity:!lineReady||sending?0.5:1}}>
-              {sending?"⏳ กำลังส่ง...":"📲 ส่ง LINE + บันทึก + รีเซ็ต"}
+                cursor:lineReady&&lineSelStaff&&lineSelZones.length>0?"pointer":"not-allowed",
+                background:lineReady&&lineSelStaff&&lineSelZones.length>0?C.line:"#ccc",
+                color:"#fff",opacity:!lineReady?0.5:1}}>
+              {sending?"⏳ กำลังส่ง...":"👀 ดูตัวอย่างก่อนส่ง"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Preview Popup (เต็มหน้าจอ) ── */}
+      {showPreview&&(
+        <div style={{position:"fixed",inset:0,zIndex:600,background:C.bg,
+          display:"flex",flexDirection:"column",maxWidth:720,margin:"0 auto"}}>
+          <div style={{background:C.bgCard,borderBottom:`1px solid ${C.border}`,
+            padding:"16px 18px",display:"flex",alignItems:"center",gap:12}}>
+            <button onClick={()=>setShowPreview(false)}
+              style={{background:"none",border:"none",fontSize:26,cursor:"pointer",
+                color:C.textMute,padding:"0 4px",lineHeight:1}}>←</button>
+            <div style={{flex:1}}>
+              <div style={{fontSize:18,fontWeight:800,color:C.text}}>👀 ตัวอย่างข้อความ LINE</div>
+              <div style={{fontSize:12,color:C.textMute,marginTop:2}}>ตรวจสอบก่อนส่งจริง</div>
+            </div>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"18px 16px"}}>
+            <div style={{background:"#dcf8c6",borderRadius:16,padding:"16px 18px",
+              fontFamily:"monospace",fontSize:15,lineHeight:1.8,color:"#1a1a1a",
+              whiteSpace:"pre-wrap",wordBreak:"break-word",
+              boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
+              {previewMsg}
+            </div>
+            <div style={{marginTop:10,fontSize:13,color:C.textMute,textAlign:"center"}}>
+              {(()=>{
+                const msgType = tab==="order" ? "order" : round
+                const targets = groupIds.filter(g=>{
+                  const types = g.types||["all"]
+                  return types.includes("all")||types.includes(msgType)
+                })
+                return targets.length>0
+                  ? <span>ส่งไป <strong style={{color:C.green}}>{targets.length} กลุ่ม</strong>: {targets.map(g=>g.name).join(", ")}</span>
+                  : <span style={{color:C.orange}}>⚠️ ไม่มีกลุ่มที่รับประเภทนี้!</span>
+              })()}
+            </div>
+          </div>
+          <div style={{padding:"16px 16px 32px",background:C.bgCard,
+            borderTop:`1px solid ${C.border}`,display:"flex",gap:10}}>
+            <button onClick={()=>setShowPreview(false)}
+              style={{flex:1,padding:"16px",borderRadius:14,border:`2px solid ${C.border2}`,
+                fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",
+                background:"transparent",color:C.textSub}}>
+              ✏️ แก้ไข
+            </button>
+            <button onClick={doSend} disabled={sending}
+              style={{flex:2,padding:"16px",borderRadius:14,border:"none",
+                fontSize:18,fontWeight:900,cursor:sending?"not-allowed":"pointer",
+                fontFamily:"inherit",
+                background:sending?"#ccc":C.line,color:"#fff"}}>
+              {sending?"⏳ กำลังส่ง...":"📲 ส่งเลย!"}
             </button>
           </div>
         </div>
@@ -369,7 +458,16 @@ export default function App() {
         {/* ═══ สั่งของ ═══ */}
         {tab==="order"&&(
           <div>
-            {zones.map(z=>{
+            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+              {[{id:"all",name:"ทั้งหมด",color:"#475569"},...zones].map(z=>(
+                <button key={z.id} onClick={()=>setOrderZFilter(z.id)} style={{
+                  padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                  fontSize:13,border:`2px solid ${orderZFilter===z.id?z.color:C.border2}`,
+                  background:orderZFilter===z.id?z.color:"transparent",
+                  color:orderZFilter===z.id?"#fff":C.textSub}}>{z.name}</button>
+              ))}
+            </div>
+            {zones.filter(z=>orderZFilter==="all"||z.id===orderZFilter).map(z=>{
               const zp=products.filter(p=>p.zone===z.id)
               if(!zp.length) return null
               return (
@@ -547,17 +645,30 @@ export default function App() {
                 </div>
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
                   <Label2>กลุ่ม LINE ({groupIds.length} กลุ่ม)</Label2>
-                  {groupIds.map(g=>(
-                    <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,
-                      padding:"10px 12px",background:C.bgCard2,borderRadius:10,marginBottom:8,
+                  {groupIds.map(g=>{
+                    const types = g.types || ["all"]
+                    const TYPE_LABELS = {morning:"🌅 สั่งเช้า", close:"🌙 ปิดร้าน", order:"🛒 สั่งของ", all:"📋 ทั้งหมด"}
+                    return (
+                    <div key={g.id} style={{padding:"12px",background:C.bgCard2,borderRadius:10,marginBottom:8,
                       border:`1px solid ${C.border}`}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:14,fontWeight:700,color:C.text}}>{g.name}</div>
-                        <div style={{fontSize:11,color:C.textMute,marginTop:2,fontFamily:"monospace",wordBreak:"break-all"}}>{g.groupId}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:700,color:C.text}}>{g.name}</div>
+                          <div style={{fontSize:11,color:C.textMute,marginTop:2,fontFamily:"monospace",wordBreak:"break-all"}}>{g.groupId}</div>
+                        </div>
+                        <DelBtn onClick={()=>setGroupIds(groupIds.filter(x=>x.id!==g.id))}/>
                       </div>
-                      <DelBtn onClick={()=>setGroupIds(groupIds.filter(x=>x.id!==g.id))}/>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        {types.map(t=>(
+                          <span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:8,fontWeight:700,
+                            background:t==="all"?"#47556920":t==="morning"?C.primaryBg:t==="close"?"#47556920":C.orangeBg,
+                            color:t==="all"?"#475569":t==="morning"?C.primary:t==="close"?"#475569":C.orange}}>
+                            {TYPE_LABELS[t]||t}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )})}
                   <div style={{background:C.bgCard2,borderRadius:12,padding:"12px 14px",
                     border:`1px dashed ${C.border2}`,marginTop:8}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.textSub,marginBottom:10}}>+ เพิ่มกลุ่ม LINE</div>
@@ -565,10 +676,44 @@ export default function App() {
                       placeholder="ชื่อกลุ่ม เช่น กลุ่มครัว" style={{...lInp(),marginBottom:8}}/>
                     <input value={newGId} onChange={e=>setNewGId(e.target.value)}
                       placeholder="Group ID: C1234..." style={{...lInp(),marginBottom:10,fontFamily:"monospace",fontSize:13}}/>
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:12,fontWeight:700,color:C.textMute,marginBottom:8}}>กลุ่มนี้รับข้อความประเภทไหน?</div>
+                      {[
+                        {id:"all",   label:"📋 รับทั้งหมด",         color:"#475569", bg:"#47556915"},
+                        {id:"morning",label:"🌅 สั่งรอบเช้า",        color:C.primary, bg:C.primaryBg},
+                        {id:"close",  label:"🌙 เช็คสต็อกปิดร้าน",   color:"#475569", bg:"#47556915"},
+                        {id:"order",  label:"🛒 รายการสั่งของ",       color:C.orange,  bg:C.orangeBg},
+                      ].map(t=>{
+                        const isChecked = newGTypes.includes(t.id)
+                        return (
+                          <div key={t.id} onClick={()=>{
+                            if(t.id==="all"){
+                              setNewGTypes(["all"])
+                            } else {
+                              const without = newGTypes.filter(x=>x!=="all")
+                              setNewGTypes(isChecked
+                                ? without.filter(x=>x!==t.id)
+                                : [...without, t.id])
+                            }
+                          }}
+                          style={{display:"flex",alignItems:"center",gap:10,
+                            padding:"10px 12px",borderRadius:10,marginBottom:6,cursor:"pointer",
+                            border:`2px solid ${isChecked?t.color:C.border}`,
+                            background:isChecked?t.bg:"transparent"}}>
+                            <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${isChecked?t.color:C.border2}`,
+                              background:isChecked?t.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                              {isChecked&&<span style={{color:"#fff",fontSize:13,fontWeight:900}}>✓</span>}
+                            </div>
+                            <span style={{fontSize:14,fontWeight:700,color:isChecked?t.color:C.textSub}}>{t.label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                     <BigBtn color={C.line} onClick={()=>{
                       if(!newGName.trim()||!newGId.trim())return
-                      setGroupIds([...groupIds,{id:Date.now().toString(),name:newGName.trim(),groupId:newGId.trim()}])
-                      setNewGName(""); setNewGId(""); showToast("✅ เพิ่มกลุ่มแล้ว")
+                      const types = newGTypes.length===0?["all"]:newGTypes
+                      setGroupIds([...groupIds,{id:Date.now().toString(),name:newGName.trim(),groupId:newGId.trim(),types}])
+                      setNewGName(""); setNewGId(""); setNewGTypes(["all"]); showToast("✅ เพิ่มกลุ่มแล้ว")
                     }}>+ เพิ่มกลุ่ม</BigBtn>
                   </div>
                 </div>
