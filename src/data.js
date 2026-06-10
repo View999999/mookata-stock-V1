@@ -1,5 +1,11 @@
+import { db } from "./firebase"
+import {
+  doc, getDoc, setDoc, onSnapshot, collection, getDocs
+} from "firebase/firestore"
+
 export const OWNER_PIN = "1234"
 
+// ── ค่าเริ่มต้น ──────────────────────────────────────────
 export const DEFAULT_ZONES = [
   { id: "z0", name: "เนื้อสัตว์",        color: "#7C6FFF" },
   { id: "z1", name: "ซีฟู้ด",            color: "#27AE8A" },
@@ -30,43 +36,140 @@ export const DEFAULT_PRODUCTS = [
   { id:14, name:"ถุงมือ",      zone:"z5", unit:"คู่",      min:50, cost:3,   morning:0, close:0, order:0, shop:"โลตัส"     },
 ]
 
-const K = {
-  products:   "mk_products",
-  zones:      "mk_zones",
-  shops:      "mk_shops",
-  history:    "mk_history",
-  token:      "mk_line_channel_token",
-  groupIds:   "mk_line_group_ids",
-  staff:      "mk_staff",
-  activeStaff:"mk_active_staff",
-  nextId:     "mk_nextid",
+// ── Firestore document paths ──────────────────────────────
+// ข้อมูลร้านทั้งหมดเก็บใน collection "shop" document "main"
+// ประวัติเก็บใน collection "history" แยก document ต่อวัน
+
+const SHOP_REF = () => doc(db, "shop", "main")
+const HISTORY_REF = (dateKey) => doc(db, "history", dateKey)
+const HISTORY_COL = () => collection(db, "history")
+
+// ── โหลดข้อมูลทั้งหมดครั้งแรก ────────────────────────────
+export async function loadAll() {
+  try {
+    const [shopSnap, histSnap] = await Promise.all([
+      getDoc(SHOP_REF()),
+      getDocs(HISTORY_COL()),
+    ])
+
+    let shopData = {}
+    if (shopSnap.exists()) {
+      shopData = shopSnap.data()
+    } else {
+      // ครั้งแรก — เขียนค่า default ลง Firestore
+      const defaults = {
+        products:    DEFAULT_PRODUCTS,
+        zones:       DEFAULT_ZONES,
+        shops:       DEFAULT_SHOPS,
+        token:       "",
+        groupIds:    [],
+        staff:       [],
+        activeStaff: "",
+        nextId:      100,
+      }
+      await setDoc(SHOP_REF(), defaults)
+      shopData = defaults
+    }
+
+    const history = []
+    histSnap.forEach(d => {
+      const data = d.data()
+      if (data.entries) history.push(...data.entries)
+    })
+
+    return {
+      products:    shopData.products    ?? DEFAULT_PRODUCTS,
+      zones:       shopData.zones       ?? DEFAULT_ZONES,
+      shops:       shopData.shops       ?? DEFAULT_SHOPS,
+      token:       shopData.token       ?? "",
+      groupIds:    shopData.groupIds    ?? [],
+      staff:       shopData.staff       ?? [],
+      activeStaff: shopData.activeStaff ?? "",
+      nextId:      shopData.nextId      ?? 100,
+      history,
+    }
+  } catch (err) {
+    console.error("loadAll error:", err)
+    // fallback localStorage ถ้า offline
+    return loadFromLocalStorage()
+  }
 }
 
-export function loadAll() {
-  const get = (key, def) => {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch { return def }
-  }
-  return {
-    products: get(K.products, DEFAULT_PRODUCTS),
-    zones:    get(K.zones,    DEFAULT_ZONES),
-    shops:    get(K.shops,    DEFAULT_SHOPS),
-    history:  get(K.history,  []),
-    token:    get(K.token,    ""),
-    groupIds: get(K.groupIds, []),
-    staff:    get(K.staff,    []),
-    activeStaff: get(K.activeStaff, ""),
-    nextId:   get(K.nextId,   100),
+// ── realtime listener (เรียกครั้งเดียว ได้ update ตลอด) ──
+export function subscribeShop(callback) {
+  return onSnapshot(SHOP_REF(), (snap) => {
+    if (snap.exists()) callback(snap.data())
+  })
+}
+
+export function subscribeHistory(callback) {
+  return onSnapshot(HISTORY_COL(), (snap) => {
+    const history = []
+    snap.forEach(d => {
+      const data = d.data()
+      if (data.entries) history.push(...data.entries)
+    })
+    callback(history)
+  })
+}
+
+// ── persist แต่ละ field ──────────────────────────────────
+// เขียนแบบ merge เพื่อไม่ overwrite field อื่น
+async function saveField(field, value) {
+  try {
+    await setDoc(SHOP_REF(), { [field]: value }, { merge: true })
+    // backup localStorage ด้วย
+    localStorage.setItem("mk_" + field, JSON.stringify(value))
+  } catch (err) {
+    console.error("saveField error:", err)
+    localStorage.setItem("mk_" + field, JSON.stringify(value))
   }
 }
 
 export const persist = {
-  products: (v) => localStorage.setItem(K.products, JSON.stringify(v)),
-  zones:    (v) => localStorage.setItem(K.zones,    JSON.stringify(v)),
-  shops:    (v) => localStorage.setItem(K.shops,    JSON.stringify(v)),
-  history:  (v) => localStorage.setItem(K.history,  JSON.stringify(v)),
-  token:      (v) => localStorage.setItem(K.token,      JSON.stringify(v)),
-  groupIds:   (v) => localStorage.setItem(K.groupIds,   JSON.stringify(v)),
-  staff:      (v) => localStorage.setItem(K.staff,      JSON.stringify(v)),
-  activeStaff:(v) => localStorage.setItem(K.activeStaff,JSON.stringify(v)),
-  nextId:   (v) => localStorage.setItem(K.nextId,   JSON.stringify(v)),
+  products:    (v) => saveField("products",    v),
+  zones:       (v) => saveField("zones",       v),
+  shops:       (v) => saveField("shops",       v),
+  token:       (v) => saveField("token",       v),
+  groupIds:    (v) => saveField("groupIds",    v),
+  staff:       (v) => saveField("staff",       v),
+  activeStaff: (v) => saveField("activeStaff", v),
+  nextId:      (v) => saveField("nextId",      v),
+  history: async (entries) => {
+    // แยก document ต่อวัน เพื่อไม่ให้ document ใหญ่เกิน 1MB
+    const byDay = {}
+    entries.forEach(e => {
+      if (!byDay[e.dateKey]) byDay[e.dateKey] = []
+      byDay[e.dateKey].push(e)
+    })
+    try {
+      await Promise.all(
+        Object.entries(byDay).map(([dk, ents]) =>
+          setDoc(HISTORY_REF(dk), { entries: ents }, { merge: false })
+        )
+      )
+      localStorage.setItem("mk_history", JSON.stringify(entries))
+    } catch (err) {
+      console.error("persist.history error:", err)
+      localStorage.setItem("mk_history", JSON.stringify(entries))
+    }
+  },
+}
+
+// ── fallback localStorage (offline) ──────────────────────
+function loadFromLocalStorage() {
+  const get = (key, def) => {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch { return def }
+  }
+  return {
+    products:    get("mk_products",    DEFAULT_PRODUCTS),
+    zones:       get("mk_zones",       DEFAULT_ZONES),
+    shops:       get("mk_shops",       DEFAULT_SHOPS),
+    history:     get("mk_history",     []),
+    token:       get("mk_token",       ""),
+    groupIds:    get("mk_groupIds",    []),
+    staff:       get("mk_staff",       []),
+    activeStaff: get("mk_activeStaff", ""),
+    nextId:      get("mk_nextId",      100),
+  }
 }

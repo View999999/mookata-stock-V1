@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { loadAll, persist, OWNER_PIN } from "./data.js"
+import { loadAll, persist, OWNER_PIN, subscribeShop, subscribeHistory } from "./data.js"
 import { todayKey, todayStr, fmtDate, prevKey, buildMsg } from "./utils.js"
 import { ZoneDot } from "./components.jsx"
 import { apiSaveStock, apiSaveOrder, apiSendLine } from "./api.js"
@@ -41,7 +41,8 @@ export default function App() {
   const [round, setRound]   = useState("morning")
   const [zFilter, setZFilter] = useState("all")
   const [sumDate, setSumDate] = useState(null)
-  const [sumZone, setSumZone] = useState("all")
+  const [sumZone, setSumZone] = useState(["all"])
+  const [showCalPop, setShowCalPop] = useState(false)
   const [toast, setToast]     = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewMsg, setPreviewMsg]   = useState("")
@@ -74,12 +75,31 @@ export default function App() {
   const setNextId     = v => { setNextIdR(v);      persist.nextId(v) }
 
   useEffect(() => {
-    const d = loadAll()
-    setProductsR(d.products); setZonesR(d.zones); setShopsR(d.shops)
-    setHistoryR(d.history);   setLineToken(d.token); setTokenInput(d.token)
-    setGroupIdsR(d.groupIds||[]); setStaffR(d.staff||[])
-    setActiveStaffR(d.activeStaff||"")
-    setNextIdR(d.nextId); setLoaded(true)
+    // โหลดครั้งแรก
+    loadAll().then(d => {
+      setProductsR(d.products); setZonesR(d.zones); setShopsR(d.shops)
+      setHistoryR(d.history);   setLineToken(d.token); setTokenInput(d.token)
+      setGroupIdsR(d.groupIds||[]); setStaffR(d.staff||[])
+      setActiveStaffR(d.activeStaff||"")
+      setNextIdR(d.nextId); setLoaded(true)
+    })
+
+    // Realtime listeners — ทุกเครื่องเห็นข้อมูลเดียวกันทันที
+    const unsubShop = subscribeShop(data => {
+      if (data.products)    setProductsR(data.products)
+      if (data.zones)       setZonesR(data.zones)
+      if (data.shops)       setShopsR(data.shops)
+      if (data.token!=null) setLineToken(data.token)
+      if (data.groupIds)    setGroupIdsR(data.groupIds)
+      if (data.staff)       setStaffR(data.staff)
+      if (data.activeStaff!=null) setActiveStaffR(data.activeStaff)
+      if (data.nextId)      setNextIdR(data.nextId)
+    })
+    const unsubHistory = subscribeHistory(history => {
+      setHistoryR(history)
+    })
+
+    return () => { unsubShop(); unsubHistory() }
   }, [])
 
   const showToast = (msg, color=C.green, big=false) => {
@@ -508,28 +528,112 @@ export default function App() {
         {/* ═══ สรุป (เจ้าของเท่านั้น) ═══ */}
         {tab==="summary"&&isOwner&&(
           <div>
-            <div style={{background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:10,
-              padding:"10px 14px",marginBottom:16,fontSize:14,color:C.green,lineHeight:1.6}}>
-              📐 <strong>(ปิดเมื่อวาน + สั่งเช้าวันนี้) − ปิดวันนี้ = ใช้ไปจริง</strong>
+            {/* Date picker card */}
+            {(()=>{
+              const allMonths=[...new Set(sortedDates.map(dk=>dk.slice(0,7)))].sort().reverse()
+              const selMonth = sumDate?sumDate.slice(0,7):(allMonths[0]||"")
+              const daysInMonth = sortedDates.filter(dk=>dk.startsWith(selMonth))
+              const [yr,mo] = selMonth ? selMonth.split("-") : ["",""]
+              const thMonths = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+              const monthLabel = mo ? `${thMonths[+mo]} ${+yr+543}` : "เลือกเดือน"
+              const dayNames = ["อา","จ","อ","พ","พฤ","ศ","ส"]
+              return (
+                <>
+                  {/* Calendar Popup */}
+                  {showCalPop&&(
+                    <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.45)",
+                      display:"flex",alignItems:"flex-end",justifyContent:"center"}}
+                      onClick={()=>setShowCalPop(false)}>
+                      <div style={{background:C.bgCard,borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",
+                        width:"100%",maxWidth:720}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                          <span style={{fontSize:16,fontWeight:800,color:C.text}}>เลือกเดือน</span>
+                          <button onClick={()=>setShowCalPop(false)}
+                            style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textMute}}>✕</button>
+                        </div>
+                        {allMonths.length===0
+                          ? <div style={{fontSize:14,color:C.textMute,textAlign:"center",padding:"20px 0"}}>ยังไม่มีข้อมูล</div>
+                          : <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
+                              {allMonths.map(m=>{
+                                const [y,mn]=m.split("-")
+                                const active=selMonth===m
+                                return (
+                                  <button key={m} onClick={()=>{
+                                    const days=sortedDates.filter(dk=>dk.startsWith(m))
+                                    setSumDate(days.at(-1)||null)
+                                    setShowCalPop(false)
+                                  }} style={{padding:"12px 6px",borderRadius:12,cursor:"pointer",fontFamily:"inherit",
+                                    border:`2px solid ${active?C.primary:C.border}`,
+                                    background:active?C.primary:"transparent",
+                                    color:active?"#fff":C.textSub,fontSize:14,fontWeight:active?700:400,textAlign:"center"}}>
+                                    {thMonths[+mn]}<br/>
+                                    <span style={{fontSize:11,opacity:0.7}}>{+y+543}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                        }
+                      </div>
+                    </div>
+                  )}
+                  <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
+                    padding:"14px 14px 10px",marginBottom:14}}>
+                    {/* ปุ่มเปิดปฏิทิน */}
+                    <button onClick={()=>setShowCalPop(true)}
+                      style={{display:"flex",alignItems:"center",gap:8,width:"100%",
+                        padding:"10px 14px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",
+                        border:`1.5px solid ${C.primary}`,background:C.primaryBg,marginBottom:12,
+                        color:C.primary,fontSize:15,fontWeight:700}}>
+                      📅 {monthLabel}
+                      <span style={{marginLeft:"auto",fontSize:12,opacity:0.7}}>เปลี่ยนเดือน</span>
+                    </button>
+                    {/* เลือกวัน */}
+                    {daysInMonth.length>0&&(
+                      <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:4}}>
+                        {daysInMonth.map(dk=>{
+                          const d=new Date(dk)
+                          const active=activeDK===dk
+                          return (
+                            <button key={dk} onClick={()=>setSumDate(dk)} style={{
+                              display:"flex",flexDirection:"column",alignItems:"center",
+                              padding:"6px 10px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0,
+                              border:`2px solid ${active?C.primary:C.border}`,
+                              background:active?C.primary:"transparent"}}>
+                              <span style={{fontSize:10,color:active?"#fff":C.textMute}}>{dayNames[d.getDay()]}</span>
+                              <span style={{fontSize:15,fontWeight:700,color:active?"#fff":C.text}}>{d.getDate()}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+            {/* Zone multi-select chips */}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              <button onClick={()=>setSumZone(["all"])} style={{
+                padding:"6px 16px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",
+                border:`2px solid ${sumZone.includes("all")?"#475569":C.border2}`,
+                background:sumZone.includes("all")?"#475569":"transparent",
+                color:sumZone.includes("all")?"#fff":C.textSub,fontSize:13,fontWeight:700}}>ทั้งหมด</button>
+              {zones.map(z=>{
+                const sel=!sumZone.includes("all")&&sumZone.includes(z.id)
+                return (
+                  <button key={z.id} onClick={()=>{
+                    if(sumZone.includes("all")){setSumZone([z.id]);return}
+                    const next=sel?sumZone.filter(x=>x!==z.id):[...sumZone,z.id]
+                    setSumZone(next.length===0?["all"]:next)
+                  }} style={{
+                    padding:"6px 16px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",
+                    border:`2px solid ${sel?z.color:C.border2}`,
+                    background:sel?z.color:"transparent",
+                    color:sel?"#fff":C.textSub,fontSize:13,fontWeight:sel?700:400}}>
+                    {z.name}
+                  </button>
+                )
+              })}
             </div>
-            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:14}}>
-              {displayDates.length===0
-                ?<span style={{fontSize:14,color:C.textMute}}>ยังไม่มีข้อมูล</span>
-                :displayDates.map(d=>(
-                  <button key={d.key} onClick={()=>setSumDate(d.key)} style={{
-                    padding:"7px 16px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",
-                    border:`2px solid ${activeDK===d.key?C.primary:C.border2}`,fontFamily:"inherit",
-                    background:activeDK===d.key?C.primary:"transparent",
-                    color:activeDK===d.key?"#fff":C.textSub,
-                    fontSize:13,fontWeight:activeDK===d.key?700:400}}>{d.label}</button>
-                ))
-              }
-            </div>
-            <select value={sumZone} onChange={e=>setSumZone(e.target.value)}
-              style={{...lSel(),marginBottom:14,width:"auto",minWidth:140}}>
-              <option value="all">ทุกโซน</option>
-              {zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
-            </select>
             {activeDK&&(()=>{
               const pdk=prevKey(activeDK,sortedDates)
               const dr=history.filter(h=>h.dateKey===activeDK)
@@ -570,11 +674,10 @@ export default function App() {
                 </div>
               )
             })()}
-            {zones.filter(z=>sumZone==="all"||z.id===sumZone).map(z=>{
+            {zones.filter(z=>sumZone.includes("all")||sumZone.includes(z.id)).map(z=>{
               const zRows=summaryRows.filter(r=>r.p.zone===z.id)
               if(!zRows.length) return null
-              const cols=["สินค้า","ปิดเมื่อวาน","สั่งเช้า","รวมต้น","ปิดวันนี้","ใช้ไปจริง","สถานะ","ต้นทุน"]
-              const gcols=`1.4fr ${cols.slice(1).map(()=>"1fr").join(" ")}`
+              const maxUsed=Math.max(1,...zRows.map(r=>r.used||0))
               return (
                 <div key={z.id} style={{marginBottom:22}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
@@ -582,28 +685,59 @@ export default function App() {
                     <span style={{fontSize:14,fontWeight:800,color:z.color}}>{z.name}</span>
                   </div>
                   <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:gcols}}>
-                      {cols.map(h=>(
-                        <div key={h} style={{padding:"8px 10px",fontSize:12,color:C.textMute,
-                          borderBottom:`1px solid ${C.border}`,fontWeight:700,background:C.bgCard2}}>{h}</div>
+                    {/* header */}
+                    <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 1fr 1.2fr 1.3fr",
+                      background:C.bgCard2,borderBottom:`1px solid ${C.border}`}}>
+                      {["สินค้า","ต้น (เมื่อวาน+เช้า)","ปิดวันนี้","ใช้ไปจริง","ต้นทุน"].map(h=>(
+                        <div key={h} style={{padding:"8px 8px",fontSize:11,color:C.textMute,fontWeight:700,lineHeight:1.3}}>{h}</div>
                       ))}
-                      {zRows.map(({p,prevClose,morning,todayClose,start,used})=>{
-                        const uc=used!==null?used*p.cost:null
-                        return [
-                          <LC key={`${p.id}n`} bold>{p.name}</LC>,
-                          <LC key={`${p.id}pc`}>{prevClose!==null?`${prevClose} ${p.unit}`:<Fm>ไม่มี</Fm>}</LC>,
-                          <LC key={`${p.id}m`}>{morning!==null?`${morning} ${p.unit}`:<Fm>ไม่มี</Fm>}</LC>,
-                          <LC key={`${p.id}s`}>{(prevClose!==null||morning!==null)?`${start} ${p.unit}`:"—"}</LC>,
-                          <LC key={`${p.id}tc`}>{todayClose!==null?`${todayClose} ${p.unit}`:<Fm>รอปิด</Fm>}</LC>,
-                          <LC key={`${p.id}u`}>{used!==null
-                            ?<span style={{color:used>0?C.red:C.green,fontWeight:700}}>{used>0?`-${used}`:0} {p.unit}</span>
-                            :<Fm>รอข้อมูล</Fm>}
-                          </LC>,
-                          <LC key={`${p.id}st`}><SBadge val={todayClose} min={p.min}/></LC>,
-                          <LC key={`${p.id}c`}>{uc!==null?<span style={{color:C.purple}}>฿{uc.toLocaleString()}</span>:"—"}</LC>,
-                        ]
-                      })}
                     </div>
+                    {/* rows */}
+                    {zRows.map(({p,prevClose,morning,todayClose,start,used},i)=>{
+                      const uc=used!=null?used*p.cost:null
+                      const barPct=used>0?Math.round((used/maxUsed)*100):0
+                      return (
+                        <div key={p.id} style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 1fr 1.2fr 1.3fr",
+                          borderBottom:i<zRows.length-1?`1px solid ${C.border}`:"none",
+                          background:i%2===0?"transparent":C.bgCard2}}>
+                          {/* ชื่อ */}
+                          <div style={{padding:"10px 8px"}}>
+                            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}</div>
+                            {p.unit&&<div style={{fontSize:11,color:C.textMute}}>{p.unit}</div>}
+                            {todayClose!=null&&todayClose<p.min&&(
+                              <span style={{fontSize:10,background:C.orangeBg,color:C.orange,
+                                padding:"1px 6px",borderRadius:6,fontWeight:700}}>ใกล้หมด</span>
+                            )}
+                          </div>
+                          {/* ต้น */}
+                          <div style={{padding:"10px 8px",fontSize:13,color:C.textSub,display:"flex",alignItems:"center"}}>
+                            {(prevClose!=null||morning!=null)?`${start} ${p.unit}`:<span style={{color:C.textMute,fontSize:12}}>ไม่มี</span>}
+                          </div>
+                          {/* ปิดวันนี้ */}
+                          <div style={{padding:"10px 8px",fontSize:13,color:C.text,display:"flex",alignItems:"center"}}>
+                            {todayClose!=null?`${todayClose} ${p.unit}`:<span style={{color:C.textMute,fontSize:12}}>รอปิด</span>}
+                          </div>
+                          {/* ใช้ไป + bar */}
+                          <div style={{padding:"10px 8px",display:"flex",flexDirection:"column",justifyContent:"center",gap:4}}>
+                            {used!=null
+                              ? <>
+                                  <span style={{fontSize:13,fontWeight:700,color:used>0?C.red:C.green}}>
+                                    {used>0?`-${used}`:0} {p.unit}
+                                  </span>
+                                  {used>0&&<div style={{height:4,borderRadius:2,background:C.border2,overflow:"hidden"}}>
+                                    <div style={{height:"100%",borderRadius:2,background:C.red,width:`${barPct}%`,opacity:0.7}}/>
+                                  </div>}
+                                </>
+                              : <span style={{color:C.textMute,fontSize:12}}>รอข้อมูล</span>
+                            }
+                          </div>
+                          {/* ต้นทุน */}
+                          <div style={{padding:"10px 8px",fontSize:13,color:C.purple,display:"flex",alignItems:"center",fontWeight:700}}>
+                            {uc!=null?`฿${uc.toLocaleString()}`:"—"}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )
@@ -786,14 +920,43 @@ export default function App() {
               {products.map(p=>{
                 const z=zoneOf(p.zone)
                 return (
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,
-                    padding:"10px 0",borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}>
-                    <ZoneDot color={z.color} size={8}/>
-                    <span style={{fontSize:14,color:C.text,flex:1,minWidth:80,fontWeight:600}}>{p.name}</span>
-                    <span style={{fontSize:12,color:C.textMute}}>{p.unit} · ต่ำสุด {p.min}</span>
-                    {isOwner&&<span style={{fontSize:12,color:C.purple,fontWeight:700}}>฿{p.cost}</span>}
-                    <span style={{fontSize:12,color:C.textMute}}>{p.shop}</span>
-                    {isOwner&&<DelBtn onClick={()=>setProducts(products.filter(x=>x.id!==p.id))}/>}
+                  <div key={p.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:isOwner?8:0}}>
+                      <ZoneDot color={z.color} size={8}/>
+                      <span style={{fontSize:14,color:C.text,flex:1,fontWeight:700}}>{p.name}</span>
+                      {isOwner&&<DelBtn onClick={()=>setProducts(products.filter(x=>x.id!==p.id))}/>}
+                    </div>
+                    {isOwner&&(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,paddingLeft:16}}>
+                        <div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>หน่วย</div>
+                          <input value={p.unit} onChange={e=>updProd(p.id,"unit",e.target.value)}
+                            style={{...lInp(),fontSize:13,padding:"6px 10px"}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>สต็อกต่ำสุด</div>
+                          <input type="number" value={p.min} onChange={e=>updProd(p.id,"min",parseInt(e.target.value)||0)}
+                            style={{...lInp(),fontSize:13,padding:"6px 10px"}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>ราคา/หน่วย (฿)</div>
+                          <input type="number" value={p.cost} onChange={e=>updProd(p.id,"cost",parseInt(e.target.value)||0)}
+                            style={{...lInp(),fontSize:13,padding:"6px 10px",color:C.purple,fontWeight:700}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>ร้านค้า</div>
+                          <select value={p.shop} onChange={e=>updProd(p.id,"shop",e.target.value)}
+                            style={{...lSel(),fontSize:13,padding:"6px 10px"}}>
+                            {shops.map(s=><option key={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {!isOwner&&(
+                      <div style={{paddingLeft:16,fontSize:12,color:C.textMute}}>
+                        {p.unit} · ต่ำสุด {p.min} · {p.shop}
+                      </div>
+                    )}
                   </div>
                 )
               })}
