@@ -43,6 +43,11 @@ export default function App() {
   const [sumDate, setSumDate] = useState(null)
   const [sumZone, setSumZone] = useState(["all"])
   const [showCalPop, setShowCalPop] = useState(false)
+  const [sumWeekOffset, setSumWeekOffset] = useState(0)
+  const [pinOld, setPinOld] = useState("")
+  const [pinNew, setPinNew] = useState("")
+  const [pinNew2, setPinNew2] = useState("")
+  const [ownerPin, setOwnerPin] = useState(OWNER_PIN)
   const [toast, setToast]     = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewMsg, setPreviewMsg]   = useState("")
@@ -81,7 +86,9 @@ export default function App() {
       setHistoryR(d.history);   setLineToken(d.token); setTokenInput(d.token)
       setGroupIdsR(d.groupIds||[]); setStaffR(d.staff||[])
       setActiveStaffR(d.activeStaff||"")
-      setNextIdR(d.nextId); setLoaded(true)
+      setNextIdR(d.nextId)
+      if(d.ownerPin) setOwnerPin(d.ownerPin)
+      setLoaded(true)
     })
 
     // Realtime listeners — ทุกเครื่องเห็นข้อมูลเดียวกันทันที
@@ -94,6 +101,7 @@ export default function App() {
       if (data.staff)       setStaffR(data.staff)
       if (data.activeStaff!=null) setActiveStaffR(data.activeStaff)
       if (data.nextId)      setNextIdR(data.nextId)
+      if (data.ownerPin)    setOwnerPin(data.ownerPin)
     })
     const unsubHistory = subscribeHistory(history => {
       setHistoryR(history)
@@ -109,7 +117,7 @@ export default function App() {
   const toggleAuth = () => {
     if (isOwner) { setIsOwner(false); return }
     const pin = window.prompt("รหัสเจ้าของร้าน:")
-    if (pin===OWNER_PIN) setIsOwner(true)
+    if (pin===ownerPin) setIsOwner(true)
     else if (pin!==null) showToast("❌ รหัสไม่ถูกต้อง",C.red)
   }
 
@@ -528,95 +536,76 @@ export default function App() {
         {/* ═══ สรุป (เจ้าของเท่านั้น) ═══ */}
         {tab==="summary"&&isOwner&&(
           <div>
-            {/* Date picker card */}
             {(()=>{
-              const allMonths=[...new Set(sortedDates.map(dk=>dk.slice(0,7)))].sort().reverse()
-              const selMonth = sumDate?sumDate.slice(0,7):(allMonths[0]||"")
-              const daysInMonth = sortedDates.filter(dk=>dk.startsWith(selMonth))
-              const [yr,mo] = selMonth ? selMonth.split("-") : ["",""]
-              const thMonths = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
-              const monthLabel = mo ? `${thMonths[+mo]} ${+yr+543}` : "เลือกเดือน"
-              const dayNames = ["อา","จ","อ","พ","พฤ","ศ","ส"]
+              const thMonths=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+              const dayNames=["อา","จ","อ","พ","พฤ","ศ","ส"]
+              // หาวันจันทร์ของสัปดาห์ที่เลือก
+              const today=new Date(); today.setHours(0,0,0,0)
+              const todayMon=new Date(today)
+              todayMon.setDate(today.getDate()-((today.getDay()+6)%7))
+              const weekStart=new Date(todayMon)
+              weekStart.setDate(todayMon.getDate()+sumWeekOffset*7)
+              const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6)
+              const weekDays=Array.from({length:7},(_,i)=>{
+                const d=new Date(weekStart); d.setDate(weekStart.getDate()+i); return d
+              })
+              const fmt=d=>`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`
+              const ws=weekStart; const we=weekEnd
+              const weekLabel=ws.getMonth()===we.getMonth()
+                ? `${ws.getDate()}–${we.getDate()} ${thMonths[ws.getMonth()+1]} ${ws.getFullYear()+543}`
+                : `${ws.getDate()} ${thMonths[ws.getMonth()+1]} – ${we.getDate()} ${thMonths[we.getMonth()+1]} ${we.getFullYear()+543}`
               return (
-                <>
-                  {/* Calendar Popup */}
-                  {showCalPop&&(
-                    <div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.45)",
-                      display:"flex",alignItems:"flex-end",justifyContent:"center"}}
-                      onClick={()=>setShowCalPop(false)}>
-                      <div style={{background:C.bgCard,borderRadius:"20px 20px 0 0",padding:"20px 16px 36px",
-                        width:"100%",maxWidth:720}} onClick={e=>e.stopPropagation()}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                          <span style={{fontSize:16,fontWeight:800,color:C.text}}>เลือกเดือน</span>
-                          <button onClick={()=>setShowCalPop(false)}
-                            style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textMute}}>✕</button>
-                        </div>
-                        {allMonths.length===0
-                          ? <div style={{fontSize:14,color:C.textMute,textAlign:"center",padding:"20px 0"}}>ยังไม่มีข้อมูล</div>
-                          : <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
-                              {allMonths.map(m=>{
-                                const [y,mn]=m.split("-")
-                                const active=selMonth===m
-                                return (
-                                  <button key={m} onClick={()=>{
-                                    const days=sortedDates.filter(dk=>dk.startsWith(m))
-                                    setSumDate(days.at(-1)||null)
-                                    setShowCalPop(false)
-                                  }} style={{padding:"12px 6px",borderRadius:12,cursor:"pointer",fontFamily:"inherit",
-                                    border:`2px solid ${active?C.primary:C.border}`,
-                                    background:active?C.primary:"transparent",
-                                    color:active?"#fff":C.textSub,fontSize:14,fontWeight:active?700:400,textAlign:"center"}}>
-                                    {thMonths[+mn]}<br/>
-                                    <span style={{fontSize:11,opacity:0.7}}>{+y+543}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                        }
-                      </div>
-                    </div>
-                  )}
-                  <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
-                    padding:"14px 14px 10px",marginBottom:14}}>
-                    {/* ปุ่มเปิดปฏิทิน */}
-                    <button onClick={()=>setShowCalPop(true)}
-                      style={{display:"flex",alignItems:"center",gap:8,width:"100%",
-                        padding:"10px 14px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",
-                        border:`1.5px solid ${C.primary}`,background:C.primaryBg,marginBottom:12,
-                        color:C.primary,fontSize:15,fontWeight:700}}>
-                      📅 {monthLabel}
-                      <span style={{marginLeft:"auto",fontSize:12,opacity:0.7}}>เปลี่ยนเดือน</span>
-                    </button>
-                    {/* เลือกวัน */}
-                    {daysInMonth.length>0&&(
-                      <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:4}}>
-                        {daysInMonth.map(dk=>{
-                          const d=new Date(dk)
-                          const active=activeDK===dk
-                          return (
-                            <button key={dk} onClick={()=>setSumDate(dk)} style={{
-                              display:"flex",flexDirection:"column",alignItems:"center",
-                              padding:"6px 10px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",flexShrink:0,
-                              border:`2px solid ${active?C.primary:C.border}`,
-                              background:active?C.primary:"transparent"}}>
-                              <span style={{fontSize:10,color:active?"#fff":C.textMute}}>{dayNames[d.getDay()]}</span>
-                              <span style={{fontSize:15,fontWeight:700,color:active?"#fff":C.text}}>{d.getDate()}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,
+                  overflow:"hidden",marginBottom:12}}>
+                  {/* header สัปดาห์ */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                    padding:"10px 14px",borderBottom:`1px solid ${C.border}`}}>
+                    <button onClick={()=>setSumWeekOffset(o=>o-1)}
+                      style={{background:"none",border:"none",fontSize:20,cursor:"pointer",
+                        color:C.textSub,padding:"0 4px",lineHeight:1}}>‹</button>
+                    <span style={{fontSize:14,fontWeight:700,color:C.text}}>{weekLabel}</span>
+                    <button onClick={()=>setSumWeekOffset(o=>Math.min(0,o+1))}
+                      style={{background:"none",border:"none",fontSize:20,cursor:"pointer",
+                        color:sumWeekOffset===0?C.border2:C.textSub,padding:"0 4px",lineHeight:1}}>›</button>
                   </div>
-                </>
+                  {/* 7 วัน */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,padding:"8px 6px"}}>
+                    {weekDays.map(d=>{
+                      const dk=fmt(d)
+                      const hasData=sortedDates.includes(dk)
+                      const active=activeDK===dk
+                      const isToday=fmt(d)===fmt(today)
+                      return (
+                        <button key={dk} onClick={()=>hasData&&setSumDate(dk)}
+                          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                            padding:"6px 2px",borderRadius:10,cursor:hasData?"pointer":"default",fontFamily:"inherit",
+                            border:`2px solid ${active?C.primary:"transparent"}`,
+                            background:active?C.primary:"transparent"}}>
+                          <span style={{fontSize:9,color:active?"#fff":isToday?C.primary:C.textMute,fontWeight:isToday?700:400}}>
+                            {dayNames[d.getDay()]}
+                          </span>
+                          <span style={{fontSize:14,fontWeight:700,color:active?"#fff":hasData?C.text:C.border2}}>
+                            {d.getDate()}
+                          </span>
+                          {hasData&&!active&&<div style={{width:5,height:5,borderRadius:"50%",background:C.primary}}/>}
+                          {!hasData&&<div style={{width:5,height:5}}/>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })()}
-            {/* Zone multi-select chips */}
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+
+            {/* Zone chips */}
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
               <button onClick={()=>setSumZone(["all"])} style={{
-                padding:"6px 16px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",
-                border:`2px solid ${sumZone.includes("all")?"#475569":C.border2}`,
+                padding:"5px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                border:`1.5px solid ${sumZone.includes("all")?"#475569":C.border2}`,
                 background:sumZone.includes("all")?"#475569":"transparent",
-                color:sumZone.includes("all")?"#fff":C.textSub,fontSize:13,fontWeight:700}}>ทั้งหมด</button>
+                color:sumZone.includes("all")?"#fff":C.textSub,fontWeight:sumZone.includes("all")?700:400}}>
+                ทั้งหมด
+              </button>
               {zones.map(z=>{
                 const sel=!sumZone.includes("all")&&sumZone.includes(z.id)
                 return (
@@ -625,27 +614,32 @@ export default function App() {
                     const next=sel?sumZone.filter(x=>x!==z.id):[...sumZone,z.id]
                     setSumZone(next.length===0?["all"]:next)
                   }} style={{
-                    padding:"6px 16px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",
-                    border:`2px solid ${sel?z.color:C.border2}`,
-                    background:sel?z.color:"transparent",
-                    color:sel?"#fff":C.textSub,fontSize:13,fontWeight:sel?700:400}}>
+                    display:"flex",alignItems:"center",gap:5,
+                    padding:"5px 12px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                    border:`1.5px solid ${sel?z.color:C.border2}`,
+                    background:sel?z.color+"22":"transparent",
+                    color:sel?z.color:C.textSub,fontWeight:sel?700:400}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:sel?z.color:C.border2,flexShrink:0,display:"inline-block"}}/>
                     {z.name}
                   </button>
                 )
               })}
             </div>
+
+            {/* สถานะวัน */}
             {activeDK&&(()=>{
               const pdk=prevKey(activeDK,sortedDates)
               const dr=history.filter(h=>h.dateKey===activeDK)
               const pr=pdk?history.filter(h=>h.dateKey===pdk):[]
+              const statuses=[
+                {label:"ปิดเมื่อวาน",ok:!!pr.find(h=>h.round==="close")},
+                {label:"สั่งเช้าวันนี้",ok:!!dr.find(h=>h.round==="morning")},
+                {label:"ปิดวันนี้",ok:!!dr.find(h=>h.round==="close")},
+              ]
               return (
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-                  {[
-                    {label:"ปิดเมื่อวาน",ok:!!pr.find(h=>h.round==="close")},
-                    {label:"สั่งเช้าวันนี้",ok:!!dr.find(h=>h.round==="morning")},
-                    {label:"ปิดวันนี้",ok:!!dr.find(h=>h.round==="close")},
-                  ].map(s=>(
-                    <span key={s.label} style={{fontSize:13,padding:"4px 13px",borderRadius:20,fontWeight:700,
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                  {statuses.map(s=>(
+                    <span key={s.label} style={{fontSize:12,padding:"4px 12px",borderRadius:20,fontWeight:700,
                       background:s.ok?C.greenBg:C.orangeBg,color:s.ok?C.green:C.orange}}>
                       {s.ok?"✅":"❌"} {s.label}
                     </span>
@@ -653,98 +647,107 @@ export default function App() {
                 </div>
               )
             })()}
+
+            {/* stat cards */}
             {summaryRows.length>0&&(()=>{
               const usedCost=summaryRows.reduce((s,r)=>s+(r.used??0)*r.p.cost,0)
               const remainCost=summaryRows.reduce((s,r)=>s+(r.todayClose??0)*r.p.cost,0)
               const low=summaryRows.filter(r=>r.todayClose!==null&&r.todayClose<r.p.min).length
               return (
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",
-                  gap:10,marginBottom:18}}>
-                  {[
-                    {label:"ต้นทุนใช้ไป",val:`฿${usedCost.toLocaleString()}`,color:C.purple},
-                    {label:"สต็อกคงเหลือ",val:`฿${remainCost.toLocaleString()}`,color:C.green},
-                    {label:"ใกล้หมด/หมด",val:low,color:C.orange},
-                  ].map(m=>(
-                    <div key={m.label} style={{background:C.bgCard,border:`1px solid ${C.border}`,
-                      borderRadius:12,padding:"14px 16px"}}>
-                      <div style={{fontSize:12,color:C.textMute,marginBottom:4}}>{m.label}</div>
-                      <div style={{fontSize:22,fontWeight:800,color:m.color}}>{m.val}</div>
-                    </div>
-                  ))}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                  <div style={{background:"#FCEBEB",borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontSize:10,color:"#791F1F",marginBottom:3}}>ใช้ไป</div>
+                    <div style={{fontSize:16,fontWeight:800,color:"#A32D2D"}}>฿{usedCost.toLocaleString()}</div>
+                  </div>
+                  <div style={{background:C.greenBg,borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontSize:10,color:"#166534",marginBottom:3}}>คงเหลือ</div>
+                    <div style={{fontSize:16,fontWeight:800,color:C.green}}>฿{remainCost.toLocaleString()}</div>
+                  </div>
+                  <div style={{background:C.orangeBg,borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontSize:10,color:"#92400E",marginBottom:3}}>ใกล้หมด</div>
+                    <div style={{fontSize:16,fontWeight:800,color:C.orange}}>{low} รายการ</div>
+                  </div>
                 </div>
               )
             })()}
+
+            {/* ตาราง */}
+            {!activeDK&&<div style={{textAlign:"center",padding:"32px 0",fontSize:14,color:C.textMute}}>
+              กดเลือกวันที่มีข้อมูล (จุดสีน้ำเงิน)
+            </div>}
             {zones.filter(z=>sumZone.includes("all")||sumZone.includes(z.id)).map(z=>{
               const zRows=summaryRows.filter(r=>r.p.zone===z.id)
               if(!zRows.length) return null
               const maxUsed=Math.max(1,...zRows.map(r=>r.used||0))
               return (
-                <div key={z.id} style={{marginBottom:22}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
-                    <ZoneDot color={z.color}/>
-                    <span style={{fontSize:14,fontWeight:800,color:z.color}}>{z.name}</span>
-                  </div>
+                <div key={z.id} style={{marginBottom:18}}>
                   <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
-                    {/* header */}
-                    <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 1fr 1.2fr 1.3fr",
+                    <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",
                       background:C.bgCard2,borderBottom:`1px solid ${C.border}`}}>
-                      {["สินค้า","ต้น (เมื่อวาน+เช้า)","ปิดวันนี้","ใช้ไปจริง","ต้นทุน"].map(h=>(
-                        <div key={h} style={{padding:"8px 8px",fontSize:11,color:C.textMute,fontWeight:700,lineHeight:1.3}}>{h}</div>
-                      ))}
+                      <span style={{width:8,height:8,borderRadius:"50%",background:z.color,flexShrink:0,display:"inline-block"}}/>
+                      <span style={{fontSize:13,fontWeight:700,color:z.color}}>{z.name}</span>
                     </div>
-                    {/* rows */}
-                    {zRows.map(({p,prevClose,morning,todayClose,start,used},i)=>{
-                      const uc=used!=null?used*p.cost:null
-                      const barPct=used>0?Math.round((used/maxUsed)*100):0
-                      return (
-                        <div key={p.id} style={{display:"grid",gridTemplateColumns:"1.6fr 1fr 1fr 1.2fr 1.3fr",
-                          borderBottom:i<zRows.length-1?`1px solid ${C.border}`:"none",
-                          background:i%2===0?"transparent":C.bgCard2}}>
-                          {/* ชื่อ */}
-                          <div style={{padding:"10px 8px"}}>
-                            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}</div>
-                            {p.unit&&<div style={{fontSize:11,color:C.textMute}}>{p.unit}</div>}
-                            {todayClose!=null&&todayClose<p.min&&(
-                              <span style={{fontSize:10,background:C.orangeBg,color:C.orange,
-                                padding:"1px 6px",borderRadius:6,fontWeight:700}}>ใกล้หมด</span>
-                            )}
-                          </div>
-                          {/* ต้น */}
-                          <div style={{padding:"10px 8px",fontSize:13,color:C.textSub,display:"flex",alignItems:"center"}}>
-                            {(prevClose!=null||morning!=null)?`${start} ${p.unit}`:<span style={{color:C.textMute,fontSize:12}}>ไม่มี</span>}
-                          </div>
-                          {/* ปิดวันนี้ */}
-                          <div style={{padding:"10px 8px",fontSize:13,color:C.text,display:"flex",alignItems:"center"}}>
-                            {todayClose!=null?`${todayClose} ${p.unit}`:<span style={{color:C.textMute,fontSize:12}}>รอปิด</span>}
-                          </div>
-                          {/* ใช้ไป + bar */}
-                          <div style={{padding:"10px 8px",display:"flex",flexDirection:"column",justifyContent:"center",gap:4}}>
-                            {used!=null
-                              ? <>
-                                  <span style={{fontSize:13,fontWeight:700,color:used>0?C.red:C.green}}>
-                                    {used>0?`-${used}`:0} {p.unit}
-                                  </span>
-                                  {used>0&&<div style={{height:4,borderRadius:2,background:C.border2,overflow:"hidden"}}>
-                                    <div style={{height:"100%",borderRadius:2,background:C.red,width:`${barPct}%`,opacity:0.7}}/>
-                                  </div>}
-                                </>
-                              : <span style={{color:C.textMute,fontSize:12}}>รอข้อมูล</span>
-                            }
-                          </div>
-                          {/* ต้นทุน */}
-                          <div style={{padding:"10px 8px",fontSize:13,color:C.purple,display:"flex",alignItems:"center",fontWeight:700}}>
-                            {uc!=null?`฿${uc.toLocaleString()}`:"—"}
-                          </div>
-                        </div>
-                      )
-                    })}
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:300}}>
+                        <thead>
+                          <tr style={{background:C.bgCard2}}>
+                            {["สินค้า","ต้น","ปิด","ใช้ไป","฿"].map((h,i)=>(
+                              <th key={h} style={{padding:"6px 8px",fontSize:10,color:C.textMute,fontWeight:700,
+                                textAlign:i===0?"left":"right",
+                                width:i===0?"32%":i===3?"22%":"15%",
+                                borderBottom:`1px solid ${C.border}`}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {zRows.map(({p,prevClose,morning,todayClose,start,used},i)=>{
+                            const uc=used!=null?used*p.cost:null
+                            const barPct=used>0?Math.round((used/maxUsed)*100):0
+                            return (
+                              <tr key={p.id} style={{borderBottom:i<zRows.length-1?`1px solid ${C.border}`:"none",
+                                background:i%2===0?"transparent":C.bgCard2}}>
+                                <td style={{padding:"9px 8px"}}>
+                                  <div style={{fontSize:12,fontWeight:700,color:C.text}}>{p.name}</div>
+                                  <div style={{fontSize:10,color:C.textMute}}>{p.unit}</div>
+                                  {todayClose!=null&&todayClose<p.min&&(
+                                    <span style={{fontSize:9,background:C.orangeBg,color:C.orange,
+                                      padding:"1px 5px",borderRadius:5,fontWeight:700}}>ใกล้หมด</span>
+                                  )}
+                                </td>
+                                <td style={{padding:"9px 8px",fontSize:12,color:C.textSub,textAlign:"right"}}>
+                                  {(prevClose!=null||morning!=null)?start:<span style={{color:C.border2}}>—</span>}
+                                </td>
+                                <td style={{padding:"9px 8px",fontSize:12,color:C.text,textAlign:"right"}}>
+                                  {todayClose!=null?todayClose:<span style={{color:C.textMute,fontSize:11}}>รอปิด</span>}
+                                </td>
+                                <td style={{padding:"9px 8px",textAlign:"right"}}>
+                                  {used!=null
+                                    ? <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                                        <span style={{fontSize:12,fontWeight:700,color:used>0?"#A32D2D":C.green}}>
+                                          {used>0?`-${used}`:0}
+                                        </span>
+                                        {used>0&&<div style={{width:36,height:4,borderRadius:2,background:C.border2,overflow:"hidden"}}>
+                                          <div style={{height:"100%",borderRadius:2,background:"#E24B4A",width:`${barPct}%`}}/>
+                                        </div>}
+                                      </div>
+                                    : <span style={{color:C.textMute,fontSize:11}}>รอ</span>
+                                  }
+                                </td>
+                                <td style={{padding:"9px 8px",fontSize:12,color:C.purple,textAlign:"right",fontWeight:700}}>
+                                  {uc!=null?`฿${uc.toLocaleString()}`:"—"}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-
         {/* ═══ ตั้งค่า ═══ */}
         {tab==="settings"&&(
           <div>
@@ -984,6 +987,39 @@ export default function App() {
                 </div>
               ):<LN>เพิ่ม/ลบสินค้า — เฉพาะเจ้าของ</LN>}
             </LCard>
+
+            {/* เปลี่ยนรหัสเจ้าของ */}
+            {isOwner&&(
+              <LCard>
+                <ST>🔐 เปลี่ยนรหัสเจ้าของ</ST>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <div>
+                    <Label2>รหัสปัจจุบัน</Label2>
+                    <input type="password" value={pinOld} onChange={e=>setPinOld(e.target.value)}
+                      placeholder="ใส่รหัสเดิม" style={lInp()}/>
+                  </div>
+                  <div>
+                    <Label2>รหัสใหม่</Label2>
+                    <input type="password" value={pinNew} onChange={e=>setPinNew(e.target.value)}
+                      placeholder="ใส่รหัสใหม่ (ตัวเลข 4+ หลัก)" style={lInp()}/>
+                  </div>
+                  <div>
+                    <Label2>ยืนยันรหัสใหม่</Label2>
+                    <input type="password" value={pinNew2} onChange={e=>setPinNew2(e.target.value)}
+                      placeholder="ยืนยันรหัสใหม่อีกครั้ง" style={lInp()}/>
+                  </div>
+                  <BigBtn color={C.primary} onClick={()=>{
+                    if(pinOld!==ownerPin){showToast("❌ รหัสเดิมไม่ถูกต้อง",C.red);return}
+                    if(pinNew.length<4){showToast("⚠️ รหัสใหม่ต้องมีอย่างน้อย 4 หลัก",C.orange);return}
+                    if(pinNew!==pinNew2){showToast("❌ รหัสใหม่ไม่ตรงกัน",C.red);return}
+                    setOwnerPin(pinNew)
+                    persist.ownerPin && persist.ownerPin(pinNew)
+                    setPinOld(""); setPinNew(""); setPinNew2("")
+                    showToast("✅ เปลี่ยนรหัสสำเร็จ!",C.green,true)
+                  }}>🔐 บันทึกรหัสใหม่</BigBtn>
+                </div>
+              </LCard>
+            )}
           </div>
         )}
       </div>

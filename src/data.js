@@ -86,6 +86,7 @@ export async function loadAll() {
       staff:       shopData.staff       ?? [],
       activeStaff: shopData.activeStaff ?? "",
       nextId:      shopData.nextId      ?? 100,
+      ownerPin:    shopData.ownerPin    ?? OWNER_PIN,
       history,
     }
   } catch (err) {
@@ -135,6 +136,7 @@ export const persist = {
   staff:       (v) => saveField("staff",       v),
   activeStaff: (v) => saveField("activeStaff", v),
   nextId:      (v) => saveField("nextId",      v),
+  ownerPin:    (v) => saveField("ownerPin",    v),
   history: async (entries) => {
     // แยก document ต่อวัน เพื่อไม่ให้ document ใหญ่เกิน 1MB
     const byDay = {}
