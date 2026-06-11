@@ -61,7 +61,9 @@ export default function App() {
   const [newStaffName, setNewStaffName] = useState("")
   const [newGName, setNewGName] = useState("")
   const [newGId, setNewGId]   = useState("")
-  const [newGTypes, setNewGTypes] = useState(["morning","close","order","all"])
+  const [newGTypes, setNewGTypes] = useState(["all"])
+  const [newGShops, setNewGShops] = useState(["all"])
+  const [newGBars,  setNewGBars]  = useState(["all"])
   const [npName, setNpName]   = useState("")
   const [npZone, setNpZone]   = useState("z0")
   const [npUnit, setNpUnit]   = useState("")
@@ -140,7 +142,13 @@ export default function App() {
     const msgType = tab==="order" ? "order" : round
     const dk = todayKey()
     const fakeHistory = [...history]
-    return buildMsg(msgType, selZones, products, zones, fakeHistory, dk, selStaff)
+    // preview ใช้ filter ของกลุ่มแรกที่ match type
+    const firstG = groupIds.find(g=>{const t=g.types||["all"];return t.includes("all")||t.includes(msgType)})
+    const shopF = firstG?.shops||["all"]
+    const barF  = firstG?.bars||["all"]
+    return buildMsg(msgType, selZones, products, zones, fakeHistory, dk, selStaff,
+      shopF.includes("all")?null:shopF,
+      barF.includes("all")?null:barF)
   }
 
   // Send LINE
@@ -160,15 +168,20 @@ export default function App() {
     const next = [entry,...history.filter(h=>!(h.dateKey===dk&&h.round===round))].slice(0,300)
     setHistory(next)
     apiSaveStock({round,products,zones})
-    // Build and send message — กรองกลุ่มตาม msgType ที่แต่ละกลุ่มรับ
     const msgType = tab==="order" ? "order" : round
-    const message = buildMsg(msgType, lineSelZones, products, zones, next, dk, lineSelStaff)
-    // กรองเฉพาะกลุ่มที่รับ msgType นี้ หรือรับ "all"
+    // ส่งแยกแต่ละกลุ่มตาม type + shop + bar filter
     const targetGroups = groupIds.filter(g => {
       const types = g.types || ["all"]
       return types.includes("all") || types.includes(msgType)
     })
-    await apiSendLine(message, lineToken, targetGroups)
+    for (const g of targetGroups) {
+      const shopF = g.shops||["all"]
+      const barF  = g.bars||["all"]
+      const message = buildMsg(msgType, lineSelZones, products, zones, next, dk, lineSelStaff,
+        shopF.includes("all")?null:shopF,
+        barF.includes("all")?null:barF)
+      await apiSendLine(message, lineToken, [g])
+    }
     // Reset all values
     resetAll()
     setSending(false)
@@ -783,11 +796,10 @@ export default function App() {
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
                   <Label2>กลุ่ม LINE ({groupIds.length} กลุ่ม)</Label2>
                   {groupIds.map(g=>{
-                    const types = g.types || ["all"]
-                    const TYPE_LABELS = {morning:"🌅 สั่งเช้า", close:"🌙 ปิดร้าน", order:"🛒 สั่งของ", all:"📋 ทั้งหมด"}
+                    const types=g.types||["all"]; const gshops=g.shops||["all"]; const gbars=g.bars||["all"]
+                    const TL={morning:"🌅 เช็คที่สั่ง",close:"🌙 ปิดร้าน",order:"🛒 สั่งของ",all:"📋 ทั้งหมด"}
                     return (
-                    <div key={g.id} style={{padding:"12px",background:C.bgCard2,borderRadius:10,marginBottom:8,
-                      border:`1px solid ${C.border}`}}>
+                    <div key={g.id} style={{padding:"12px",background:C.bgCard2,borderRadius:10,marginBottom:8,border:`1px solid ${C.border}`}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                         <div style={{flex:1}}>
                           <div style={{fontSize:14,fontWeight:700,color:C.text}}>{g.name}</div>
@@ -796,61 +808,63 @@ export default function App() {
                         <DelBtn onClick={()=>setGroupIds(groupIds.filter(x=>x.id!==g.id))}/>
                       </div>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        {types.map(t=>(
-                          <span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:8,fontWeight:700,
-                            background:t==="all"?"#47556920":t==="morning"?C.primaryBg:t==="close"?"#47556920":C.orangeBg,
-                            color:t==="all"?"#475569":t==="morning"?C.primary:t==="close"?"#475569":C.orange}}>
-                            {TYPE_LABELS[t]||t}
-                          </span>
-                        ))}
+                        {types.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:8,fontWeight:700,
+                          background:t==="all"?"#47556920":t==="morning"?C.primaryBg:t==="close"?"#47556920":C.orangeBg,
+                          color:t==="all"?"#475569":t==="morning"?C.primary:t==="close"?"#475569":C.orange}}>{TL[t]||t}</span>)}
+                        {!gshops.includes("all")&&gshops.map(s=><span key={s} style={{fontSize:11,padding:"2px 8px",borderRadius:8,fontWeight:700,background:C.greenBg,color:C.green}}>🏪 {s}</span>)}
+                        {!gbars.includes("all")&&gbars.map(b=><span key={b} style={{fontSize:11,padding:"2px 8px",borderRadius:8,fontWeight:700,background:"#F3E8FF",color:"#7C3AED"}}>🍽 {b}</span>)}
                       </div>
                     </div>
                   )})}
-                  <div style={{background:C.bgCard2,borderRadius:12,padding:"12px 14px",
-                    border:`1px dashed ${C.border2}`,marginTop:8}}>
+                  <div style={{background:C.bgCard2,borderRadius:12,padding:"12px 14px",border:`1px dashed ${C.border2}`,marginTop:8}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.textSub,marginBottom:10}}>+ เพิ่มกลุ่ม LINE</div>
-                    <input value={newGName} onChange={e=>setNewGName(e.target.value)}
-                      placeholder="ชื่อกลุ่ม เช่น กลุ่มครัว" style={{...lInp(),marginBottom:8}}/>
-                    <input value={newGId} onChange={e=>setNewGId(e.target.value)}
-                      placeholder="Group ID: C1234..." style={{...lInp(),marginBottom:10,fontFamily:"monospace",fontSize:13}}/>
-                    <div style={{marginBottom:12}}>
-                      <div style={{fontSize:12,fontWeight:700,color:C.textMute,marginBottom:8}}>กลุ่มนี้รับข้อความประเภทไหน?</div>
-                      {[
-                        {id:"all",   label:"📋 รับทั้งหมด",         color:"#475569", bg:"#47556915"},
-                        {id:"morning",label:"🌅 เช็คของที่สั่ง",        color:C.primary, bg:C.primaryBg},
-                        {id:"close",  label:"🌙 เช็คสต็อกปิดร้าน",   color:"#475569", bg:"#47556915"},
-                        {id:"order",  label:"🛒 รายการสั่งของ",       color:C.orange,  bg:C.orangeBg},
-                      ].map(t=>{
-                        const isChecked = newGTypes.includes(t.id)
-                        return (
-                          <div key={t.id} onClick={()=>{
-                            if(t.id==="all"){
-                              setNewGTypes(["all"])
-                            } else {
-                              const without = newGTypes.filter(x=>x!=="all")
-                              setNewGTypes(isChecked
-                                ? without.filter(x=>x!==t.id)
-                                : [...without, t.id])
-                            }
-                          }}
-                          style={{display:"flex",alignItems:"center",gap:10,
-                            padding:"10px 12px",borderRadius:10,marginBottom:6,cursor:"pointer",
-                            border:`2px solid ${isChecked?t.color:C.border}`,
-                            background:isChecked?t.bg:"transparent"}}>
-                            <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${isChecked?t.color:C.border2}`,
-                              background:isChecked?t.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              {isChecked&&<span style={{color:"#fff",fontSize:13,fontWeight:900}}>✓</span>}
-                            </div>
-                            <span style={{fontSize:14,fontWeight:700,color:isChecked?t.color:C.textSub}}>{t.label}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <input value={newGName} onChange={e=>setNewGName(e.target.value)} placeholder="ชื่อกลุ่ม เช่น กลุ่มร้านทะเล" style={{...lInp(),marginBottom:8}}/>
+                    <input value={newGId} onChange={e=>setNewGId(e.target.value)} placeholder="Group ID: C1234..." style={{...lInp(),marginBottom:10,fontFamily:"monospace",fontSize:13}}/>
+
+                    <div style={{fontSize:12,fontWeight:700,color:C.textMute,marginBottom:8}}>ประเภทข้อความ</div>
+                    {[{id:"all",label:"📋 ทั้งหมด",color:"#475569",bg:"#47556915"},{id:"morning",label:"🌅 เช็คที่สั่ง",color:C.primary,bg:C.primaryBg},{id:"close",label:"🌙 ปิดร้าน",color:"#475569",bg:"#47556915"},{id:"order",label:"🛒 สั่งของ",color:C.orange,bg:C.orangeBg}].map(t=>{
+                      const ic=newGTypes.includes(t.id)
+                      return <div key={t.id} onClick={()=>{if(t.id==="all"){setNewGTypes(["all"]);return};const w=newGTypes.filter(x=>x!=="all");setNewGTypes(ic?w.filter(x=>x!==t.id):[...w,t.id])}}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,marginBottom:5,cursor:"pointer",border:`2px solid ${ic?t.color:C.border}`,background:ic?t.bg:"transparent"}}>
+                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${ic?t.color:C.border2}`,background:ic?t.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {ic&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:13,fontWeight:700,color:ic?t.color:C.textSub}}>{t.label}</span>
+                      </div>
+                    })}
+
+                    <div style={{fontSize:12,fontWeight:700,color:C.textMute,margin:"12px 0 8px"}}>กรองร้านค้า (ซัพพลาย)</div>
+                    {[{id:"all",label:"🏪 ทุกร้านค้า"},...zones.map(z=>({id:z.id,label:z.name}))].map(z=>{
+                      const ic=newGShops.includes(z.id)
+                      return <div key={z.id} onClick={()=>{if(z.id==="all"){setNewGShops(["all"]);return};const w=newGShops.filter(x=>x!=="all");setNewGShops(ic?w.filter(x=>x!==z.id):[...w,z.id])}}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,marginBottom:5,cursor:"pointer",border:`2px solid ${ic?C.green:C.border}`,background:ic?C.greenBg:"transparent"}}>
+                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${ic?C.green:C.border2}`,background:ic?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {ic&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:13,fontWeight:700,color:ic?C.green:C.textSub}}>{z.label}</span>
+                      </div>
+                    })}
+
+                    <div style={{fontSize:12,fontWeight:700,color:C.textMute,margin:"12px 0 8px"}}>กรองบาร์ (หมวดหมู่อาหาร)</div>
+                    {[{id:"all",label:"🍽 ทุกบาร์"},...shops.map(s=>({id:s,label:s}))].map(b=>{
+                      const ic=newGBars.includes(b.id)
+                      return <div key={b.id} onClick={()=>{if(b.id==="all"){setNewGBars(["all"]);return};const w=newGBars.filter(x=>x!=="all");setNewGBars(ic?w.filter(x=>x!==b.id):[...w,b.id])}}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,marginBottom:5,cursor:"pointer",border:`2px solid ${ic?"#7C3AED":C.border}`,background:ic?"#F3E8FF":"transparent"}}>
+                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${ic?"#7C3AED":C.border2}`,background:ic?"#7C3AED":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {ic&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:13,fontWeight:700,color:ic?"#7C3AED":C.textSub}}>{b.label}</span>
+                      </div>
+                    })}
+
                     <BigBtn color={C.line} onClick={()=>{
                       if(!newGName.trim()||!newGId.trim())return
-                      const types = newGTypes.length===0?["all"]:newGTypes
-                      setGroupIds([...groupIds,{id:Date.now().toString(),name:newGName.trim(),groupId:newGId.trim(),types}])
-                      setNewGName(""); setNewGId(""); setNewGTypes(["all"]); showToast("✅ เพิ่มกลุ่มแล้ว")
+                      setGroupIds([...groupIds,{id:Date.now().toString(),name:newGName.trim(),groupId:newGId.trim(),
+                        types:newGTypes.length===0?["all"]:newGTypes,
+                        shops:newGShops.length===0?["all"]:newGShops,
+                        bars:newGBars.length===0?["all"]:newGBars}])
+                      setNewGName(""); setNewGId(""); setNewGTypes(["all"]); setNewGShops(["all"]); setNewGBars(["all"])
+                      showToast("✅ เพิ่มกลุ่มแล้ว")
                     }}>+ เพิ่มกลุ่ม</BigBtn>
                   </div>
                 </div>
