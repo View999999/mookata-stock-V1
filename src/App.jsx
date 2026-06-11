@@ -901,9 +901,9 @@ export default function App() {
                 :<LN>เพิ่ม/ลบโซน — เฉพาะเจ้าของ</LN>}
             </LCard>
 
-            {/* ร้านค้า */}
+            {/* บาร์ */}
             <LCard>
-              <ST>🛒 ร้านค้าซัพพลาย</ST>
+              <ST>🛒 บาร์</ST>
               {shops.map((s,i)=>(
                 <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <span style={{fontSize:15,color:C.text,flex:1,fontWeight:600}}>{s}</span>
@@ -911,10 +911,10 @@ export default function App() {
                 </div>
               ))}
               {isOwner
-                ?<InAdd value={newShop} onChange={setNewShop} placeholder="ชื่อร้านค้า" onAdd={()=>{
+                ?<InAdd value={newShop} onChange={setNewShop} placeholder="ชื่อบาร์" onAdd={()=>{
                   if(!newShop.trim())return; setShops([...shops,newShop.trim()]); setNewShop("")
                 }}/>
-                :<LN>เพิ่ม/ลบร้านค้า — เฉพาะเจ้าของ</LN>}
+                :<LN>เพิ่ม/ลบบาร์ — เฉพาะเจ้าของ</LN>}
             </LCard>
 
             {/* สินค้า */}
@@ -947,7 +947,7 @@ export default function App() {
                             style={{...lInp(),fontSize:13,padding:"6px 10px",color:C.purple,fontWeight:700}}/>
                         </div>
                         <div>
-                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>ร้านค้า</div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>บาร์</div>
                           <select value={p.shop} onChange={e=>updProd(p.id,"shop",e.target.value)}
                             style={{...lSel(),fontSize:13,padding:"6px 10px"}}>
                             {shops.map(s=><option key={s}>{s}</option>)}
