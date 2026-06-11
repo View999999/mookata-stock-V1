@@ -291,7 +291,7 @@ export default function App() {
             {/* ประเภทข้อความ (read-only แสดงค่า preset) */}
             <div style={{background:C.primaryBg,border:`1px solid ${C.primary}33`,borderRadius:10,
               padding:"8px 14px",marginBottom:16,fontSize:14,color:C.primary,fontWeight:700}}>
-              📋 ประเภท: {tab==="order"?"รายการสั่งของ":round==="morning"?"สั่งรอบเช้า":"ปิดร้าน"}
+              📋 ประเภท: {tab==="order"?"รายการสั่งของ":round==="morning"?"เช็คของที่สั่ง":"ปิดร้าน"}
             </div>
 
             {/* เลือกพนักงาน */}
@@ -443,7 +443,7 @@ export default function App() {
         {tab==="check"&&(
           <div>
             <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-              <RoundBtn active={round==="morning"} color={C.primary} onClick={()=>setRound("morning")}>🌅 สั่งรอบเช้า</RoundBtn>
+              <RoundBtn active={round==="morning"} color={C.primary} onClick={()=>setRound("morning")}>🌅 เช็คของที่สั่ง</RoundBtn>
               <RoundBtn active={round==="close"}   color="#475569"   onClick={()=>setRound("close")}>🌙 ปิดร้าน</RoundBtn>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -817,7 +817,7 @@ export default function App() {
                       <div style={{fontSize:12,fontWeight:700,color:C.textMute,marginBottom:8}}>กลุ่มนี้รับข้อความประเภทไหน?</div>
                       {[
                         {id:"all",   label:"📋 รับทั้งหมด",         color:"#475569", bg:"#47556915"},
-                        {id:"morning",label:"🌅 สั่งรอบเช้า",        color:C.primary, bg:C.primaryBg},
+                        {id:"morning",label:"🌅 เช็คของที่สั่ง",        color:C.primary, bg:C.primaryBg},
                         {id:"close",  label:"🌙 เช็คสต็อกปิดร้าน",   color:"#475569", bg:"#47556915"},
                         {id:"order",  label:"🛒 รายการสั่งของ",       color:C.orange,  bg:C.orangeBg},
                       ].map(t=>{
@@ -884,7 +884,7 @@ export default function App() {
 
             {/* ร้านค้า */}
             <LCard>
-              <ST>📍 ร้านค้าพนักงาน</ST>
+              <ST>📍 ร้านค้าที่จะสั่ง</ST>
               {zones.map(z=>(
                 <div key={z.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <ZoneDot color={z.color}/>
