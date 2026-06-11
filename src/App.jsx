@@ -146,7 +146,7 @@ export default function App() {
   // Send LINE
   const doSend = async () => {
     if (!lineSelStaff) { showToast("⚠️ เลือกชื่อพนักงานก่อน",C.orange); return }
-    if (lineSelZones.length===0) { showToast("⚠️ เลือกโซนอย่างน้อย 1 โซน",C.orange); return }
+    if (lineSelZones.length===0) { showToast("⚠️ เลือกร้านค้าอย่างน้อย 1 ร้านค้า",C.orange); return }
     setSending(true)
     // Save to history first
     const dk = todayKey()
@@ -314,9 +314,9 @@ export default function App() {
               )}
             </div>
 
-            {/* เลือกโซน multi-select */}
+            {/* เลือกร้านค้า multi-select */}
             <div style={{marginBottom:18}}>
-              <Label2>📍 โซนที่ส่ง</Label2>
+              <Label2>📍 ร้านค้าที่ส่ง</Label2>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 <button onClick={()=>setLineSelZones(
                   lineSelZones.length===zones.length?[]:zones.map(z=>z.id))}
@@ -342,7 +342,7 @@ export default function App() {
 
             <button onClick={()=>{
                 if (!lineSelStaff) { showToast("⚠️ เลือกชื่อพนักงานก่อน",C.orange); return }
-                if (lineSelZones.length===0) { showToast("⚠️ เลือกโซนอย่างน้อย 1 โซน",C.orange); return }
+                if (lineSelZones.length===0) { showToast("⚠️ เลือกร้านค้าอย่างน้อย 1 ร้านค้า",C.orange); return }
                 setPreviewMsg(buildPreview(lineSelZones, lineSelStaff))
                 setShowPreview(true)
               }}
@@ -882,9 +882,9 @@ export default function App() {
               ):<LN>เพิ่ม/ลบพนักงาน — เฉพาะเจ้าของ</LN>}
             </LCard>
 
-            {/* โซน */}
+            {/* ร้านค้า */}
             <LCard>
-              <ST>📍 โซนพนักงาน</ST>
+              <ST>📍 ร้านค้าพนักงาน</ST>
               {zones.map(z=>(
                 <div key={z.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <ZoneDot color={z.color}/>
@@ -893,12 +893,12 @@ export default function App() {
                 </div>
               ))}
               {isOwner
-                ?<InAdd value={newZone} onChange={setNewZone} placeholder="ชื่อโซนใหม่" onAdd={()=>{
+                ?<InAdd value={newZone} onChange={setNewZone} placeholder="ชื่อร้านค้าใหม่" onAdd={()=>{
                   if(!newZone.trim())return
                   setZones([...zones,{id:"z"+Date.now(),name:newZone.trim(),color:ZONE_COLORS[zones.length%ZONE_COLORS.length]}])
                   setNewZone("")
                 }}/>
-                :<LN>เพิ่ม/ลบโซน — เฉพาะเจ้าของ</LN>}
+                :<LN>เพิ่ม/ลบร้านค้า — เฉพาะเจ้าของ</LN>}
             </LCard>
 
             {/* บาร์ */}
