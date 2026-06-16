@@ -137,6 +137,7 @@ export const persist = {
   activeStaff: (v) => saveField("activeStaff", v),
   nextId:      (v) => saveField("nextId",      v),
   ownerPin:    (v) => saveField("ownerPin",    v),
+  pendingOrder:(v) => saveField("pendingOrder", v),
   history: async (entries) => {
     // แยก document ต่อวัน เพื่อไม่ให้ document ใหญ่เกิน 1MB
     const byDay = {}
