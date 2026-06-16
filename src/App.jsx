@@ -60,6 +60,7 @@ export default function App() {
   const [pinNew2, setPinNew2] = useState("")
   const [ownerPin, setOwnerPin] = useState(OWNER_PIN)
   const [toast, setToast]     = useState(null)
+  const [showLinePanel, setShowLinePanel] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [previewMsg, setPreviewMsg]   = useState("")
   const [orderZFilter, setOrderZFilter] = useState("all")
