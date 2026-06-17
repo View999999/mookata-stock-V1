@@ -485,6 +485,20 @@ export default function App() {
 
             {/* เช็คของที่สั่ง — โชว์รายการที่สั่งไว้ */}
             {round==="morning"?(()=>{
+              // ต้องรออนุมัติก่อน
+              if(pendingOrder){
+                return (
+                  <div style={{textAlign:"center",padding:"32px 16px"}}>
+                    <div style={{fontSize:40,marginBottom:12}}>⏳</div>
+                    <div style={{fontSize:16,fontWeight:800,color:C.orange,marginBottom:8}}>
+                      รอเจ้าของอนุมัติรายการก่อน
+                    </div>
+                    <div style={{fontSize:13,color:C.textMute}}>
+                      จาก: {pendingOrder.staff} · {new Date(pendingOrder.ts).toLocaleTimeString("th-TH")}
+                    </div>
+                  </div>
+                )
+              }
               const orderedProds = filteredProds.filter(p=>p.order>0)
               const extraItems = Object.entries(deliveryCheck)
                 .filter(([k])=>k.startsWith("extra_"))
@@ -1207,22 +1221,33 @@ export default function App() {
             <div style={{fontSize:13,color:C.textMute,marginBottom:14}}>
               จะจำไว้ในเครื่องนี้ ไม่ต้องเลือกซ้ำ
             </div>
-            {staff.map(s=>(
-              <button key={s} onClick={()=>{
-                setMyName(s); localStorage.setItem("mk_myName",s)
-                setShowNamePick(false); showToast(`✅ สวัสดี ${s}!`,C.green)
-              }} style={{width:"100%",padding:"14px 16px",borderRadius:12,
-                border:`2px solid ${myName===s?C.primary:C.border}`,
-                background:myName===s?C.primaryBg:"transparent",
-                color:myName===s?C.primary:C.text,fontSize:16,fontWeight:myName===s?800:500,
-                cursor:"pointer",fontFamily:"inherit",marginBottom:8,textAlign:"left"}}>
-              {myName===s?"✓ ":""}{s}
-            </button>
-            ))}
-            {staff.length===0&&(
-              <div style={{color:C.textMute,fontSize:14,textAlign:"center",padding:"20px 0"}}>
-                ยังไม่มีรายชื่อพนักงาน — ให้เจ้าของเพิ่มในตั้งค่าก่อน
-              </div>
+            {/* พิมพ์ชื่อเองได้เสมอ */}
+            <div style={{marginBottom:14}}>
+              <input value={myName} onChange={e=>setMyName(e.target.value)}
+                placeholder="พิมพ์ชื่อของคุณ..."
+                style={{...lInp(),fontSize:15,padding:"12px 14px"}}/>
+              <BigBtn color={C.primary} onClick={()=>{
+                if(!myName.trim()){showToast("⚠️ กรอกชื่อก่อน",C.orange);return}
+                localStorage.setItem("mk_myName",myName.trim())
+                setShowNamePick(false); showToast(`✅ สวัสดี ${myName}!`,C.green)
+              }}>บันทึกชื่อ</BigBtn>
+            </div>
+            {staff.length>0&&(
+              <>
+                <div style={{fontSize:12,color:C.textMute,marginBottom:8,fontWeight:700}}>หรือเลือกจากรายชื่อ:</div>
+                {staff.map(s=>(
+                  <button key={s} onClick={()=>{
+                    setMyName(s); localStorage.setItem("mk_myName",s)
+                    setShowNamePick(false); showToast(`✅ สวัสดี ${s}!`,C.green)
+                  }} style={{width:"100%",padding:"14px 16px",borderRadius:12,
+                    border:`2px solid ${myName===s?C.primary:C.border}`,
+                    background:myName===s?C.primaryBg:"transparent",
+                    color:myName===s?C.primary:C.text,fontSize:16,fontWeight:myName===s?800:500,
+                    cursor:"pointer",fontFamily:"inherit",marginBottom:8,textAlign:"left"}}>
+                  {myName===s?"✓ ":""}{s}
+                </button>
+                ))}
+              </>
             )}
           </div>
         </div>
