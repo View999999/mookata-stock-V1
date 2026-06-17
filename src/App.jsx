@@ -560,7 +560,37 @@ export default function App() {
                       </button>
                     </LCard>
                   )}
-                  <BigBtn color={C.line} onClick={openLinePanel}>📲 ส่งรายงานเช็คของ</BigBtn>
+                  <BigBtn color={C.line} onClick={()=>{
+                    // สร้างข้อความแจ้งครบ/ขาด/เกิน
+                    const now = new Date()
+                    const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
+                    let msg = `📦 รายงานเช็คของที่สั่ง\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n──────────────\n`
+                    let hasIssue = false
+                    orderedProds.forEach(p=>{
+                      const got = deliveryCheck[p.id]?.got ?? p.order
+                      const diff = got - p.order
+                      let icon = "✅"
+                      if(diff < 0){ icon = "🔴"; hasIssue = true }
+                      else if(diff > 0){ icon = "🟡"; hasIssue = true }
+                      msg += `${icon} ${p.name}: สั่ง ${p.order} / ได้ ${got} ${p.unit}`
+                      if(diff!==0) msg += ` (${diff>0?"+":""}${diff})`
+                      msg += "\n"
+                    })
+                    if(extraItems.length>0){
+                      msg += `\n📋 ของนอกรายการ:\n`
+                      extraItems.forEach(ex=>{ if(ex.name) msg += `➕ ${ex.name}: ${ex.qty||0}\n` })
+                    }
+                    msg += `\n${hasIssue?"⚠️ มีรายการที่ไม่ครบ/เกิน":"✅ ของครบทุกรายการ"}`
+                    // ส่งไปกลุ่มที่รับ morning
+                    const targets = groupIds.filter(g=>{const t=g.types||["all"];return t.includes("all")||t.includes("morning")})
+                    if(targets.length>0&&lineToken){
+                      apiSendLine(msg, lineToken, targets)
+                      showToast("✅ ส่งรายงานเช็คของแล้ว!",C.green,true)
+                      setDeliveryCheck({})
+                    } else {
+                      showToast("⚠️ ไม่มีกลุ่ม LINE ที่รับประเภทนี้",C.orange)
+                    }
+                  }}>📲 ส่งรายงานเช็คของ</BigBtn>
                 </div>
               )
             })():(
@@ -1242,21 +1272,24 @@ export default function App() {
             {staff&&staff.length>0&&(
               <div>
                 <div style={{fontSize:12,color:C.textMute,marginBottom:8,fontWeight:700}}>หรือเลือกจากรายชื่อ:</div>
-                {staff.map(s=>(
-                  <button key={String(s)} onClick={()=>{
-                    setMyName(String(s))
-                    localStorage.setItem("mk_myName",String(s))
-                    setShowNamePick(false)
-                    showToast(`✅ สวัสดี ${s}!`,C.green)
-                  }} style={{width:"100%",padding:"14px 16px",borderRadius:12,
-                    border:`2px solid ${myName===s?C.primary:C.border}`,
-                    background:myName===s?C.primaryBg:"transparent",
-                    color:myName===s?C.primary:C.text,fontSize:16,
-                    fontWeight:myName===s?800:500,
-                    cursor:"pointer",fontFamily:"inherit",marginBottom:8,textAlign:"left"}}>
-                    {myName===s?"✓ ":""}{String(s)}
-                  </button>
-                ))}
+                {staff.map((s,i)=>{
+                  const name = typeof s==="object" ? (s.name||s.label||JSON.stringify(s)) : String(s)
+                  return (
+                    <button key={i} onClick={()=>{
+                      setMyName(name)
+                      localStorage.setItem("mk_myName",name)
+                      setShowNamePick(false)
+                      showToast(`✅ สวัสดี ${name}!`,C.green)
+                    }} style={{width:"100%",padding:"14px 16px",borderRadius:12,
+                      border:`2px solid ${myName===name?C.primary:C.border}`,
+                      background:myName===name?C.primaryBg:"transparent",
+                      color:myName===name?C.primary:C.text,fontSize:16,
+                      fontWeight:myName===name?800:500,
+                      cursor:"pointer",fontFamily:"inherit",marginBottom:8,textAlign:"left"}}>
+                      {myName===name?"✓ ":""}{name}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1334,6 +1367,9 @@ export default function App() {
                 await apiSendLine(msg,lineToken,[g])
               }
               setPendingOrderR(null); persist.pendingOrder(null)
+              // reset order ทุกรายการเป็น 0
+              const resetProds = products.map(p=>({...p,order:0}))
+              setProducts(resetProds); persist.products(resetProds)
               setApproveSending(false); setShowApprove(false)
               showToast("✅ อนุมัติและส่ง LINE แล้ว!",C.green,true)
             }} disabled={approveSending}
