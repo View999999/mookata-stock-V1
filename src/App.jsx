@@ -466,12 +466,13 @@ export default function App() {
             <div style={{fontSize:12,color:C.textMute,marginTop:2}}>{todayStr()}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {activeStaff&&(
-              <div style={{fontSize:13,color:C.primary,fontWeight:700,
-                background:C.primaryBg,padding:"4px 12px",borderRadius:20}}>
-                👤 {activeStaff}
-              </div>
-            )}
+            {/* ชื่อกดเปลี่ยนได้ */}
+            <button onClick={()=>setShowNamePick(true)}
+              style={{fontSize:13,color:C.primary,fontWeight:700,
+                background:C.primaryBg,padding:"6px 14px",borderRadius:20,
+                border:`1.5px solid ${C.primary}`,cursor:"pointer",fontFamily:"inherit"}}>
+              👤 {myName||"เลือกชื่อ"}
+            </button>
             <button onClick={toggleAuth} style={{padding:"8px 18px",borderRadius:20,cursor:"pointer",
               fontFamily:"inherit",fontWeight:700,border:`2px solid ${isOwner?C.purple:C.border2}`,
               fontSize:13,background:isOwner?C.primaryBg:"transparent",
@@ -502,11 +503,10 @@ export default function App() {
               ))}
             </div>
 
-            {/* เช็คของที่สั่ง — โชว์รายการที่อนุมัติแล้วเท่านั้น */}
+            {/* เช็คของที่สั่ง — เห็นทุกรายการที่อนุมัติแล้ว */}
             {round==="morning"?(()=>{
               const deviceId=localStorage.getItem("mk_deviceId")
               const myPendingNow=pendingOrders.find(p=>p.deviceId===deviceId)
-              const myApproved=approvedOrders.find(a=>a.deviceId===deviceId)
 
               if(myPendingNow) return (
                 <div style={{textAlign:"center",padding:"32px 16px"}}>
@@ -515,16 +515,23 @@ export default function App() {
                   <div style={{fontSize:13,color:C.textMute}}>{new Date(myPendingNow.ts).toLocaleTimeString("th-TH")}</div>
                 </div>
               )
-              if(!myApproved) return (
+
+              // รวมทุก approvedOrders ที่มี
+              const allItems = approvedOrders.flatMap(a=>
+                (a.items||[]).map(it=>({...it, _staff: typeof a.staff==="object"?(a.staff?.name||"?"):String(a.staff||"?")}))
+              )
+
+              if(allItems.length===0) return (
                 <div style={{textAlign:"center",padding:"32px 16px"}}>
                   <div style={{fontSize:40,marginBottom:12}}>📋</div>
                   <div style={{fontSize:15,fontWeight:700,color:C.textMute}}>ยังไม่มีรายการที่อนุมัติแล้ว</div>
-                  <div style={{fontSize:13,color:C.textMute,marginTop:8}}>ไปกรอกรายการสั่งของก่อน</div>
+                  <div style={{fontSize:13,color:C.textMute,marginTop:8}}>รอเจ้าของอนุมัติก่อน</div>
                 </div>
               )
 
-              const orderedProds=myApproved.items||[]
-              const extraItems=Object.entries(deliveryCheck)
+              // กรองตาม zone filter
+              const filteredItems = zFilter==="all" ? allItems : allItems.filter(it=>it.zone===zFilter)
+              const extraItems = Object.entries(deliveryCheck)
                 .filter(([k])=>k.startsWith("extra_"))
                 .map(([k,v])=>({key:k,...v}))
 
@@ -532,27 +539,28 @@ export default function App() {
                 <div>
                   <div style={{background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:10,
                     padding:"10px 14px",fontSize:13,color:C.green,fontWeight:700,marginBottom:12}}>
-                    ✅ เจ้าของอนุมัติแล้ว — กรอกว่าของมาจริงเท่าไหร่
+                    ✅ เจ้าของอนุมัติแล้ว {approvedOrders.length} รายการ — กรอกของที่มาจริง
                   </div>
                   <LCard>
-                    {orderedProds.map((p,i)=>{
-                      const got=deliveryCheck[p.id]?.got??p.ordered
+                    {filteredItems.map((p,i)=>{
+                      const key=`${p._staff}_${p.id}`
+                      const got=deliveryCheck[key]?.got??p.ordered
                       const diff=got-p.ordered
                       return (
-                        <div key={p.id} style={{padding:"12px 0",
-                          borderBottom:i<orderedProds.length-1?`1px solid ${C.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                        <div key={key} style={{padding:"12px 0",
+                          borderBottom:i<filteredItems.length-1?`1px solid ${C.border}`:"none"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
                             <div style={{flex:1}}>
                               <div style={{fontSize:15,fontWeight:700,color:C.text}}>{p.name}</div>
                               <div style={{fontSize:12,color:C.textMute}}>
-                                สั่งไว้ <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
+                                สั่งโดย <strong>{p._staff}</strong> · สั่ง <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
                                 {diff!==0&&<span style={{marginLeft:8,fontWeight:700,
                                   color:diff>0?C.green:C.red}}>
-                                  {diff>0?`+${diff}`:`${diff}`} {p.unit}
+                                  {diff>0?`+${diff}`:`${diff}`}
                                 </span>}
                               </div>
                             </div>
-                            <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[p.id]:{got:v}}))}/>
+                            <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[key]:{got:v}}))}/>
                           </div>
                         </div>
                       )
@@ -582,15 +590,16 @@ export default function App() {
                   <BigBtn color={C.line} onClick={()=>{
                     const now=new Date()
                     const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
-                    let msg=`📦 รายงานเช็คของที่สั่ง\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n──────────────\n`
+                    let msg=`📦 รายงานเช็คของที่สั่ง\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 เช็คโดย: ${myName||"ไม่ระบุ"}\n──────────────\n`
                     let hasIssue=false
-                    orderedProds.forEach(p=>{
-                      const got=deliveryCheck[p.id]?.got??p.ordered
+                    filteredItems.forEach(p=>{
+                      const key=`${p._staff}_${p.id}`
+                      const got=deliveryCheck[key]?.got??p.ordered
                       const diff=got-p.ordered
                       let icon="✅"
                       if(diff<0){icon="🔴";hasIssue=true}
                       else if(diff>0){icon="🟡";hasIssue=true}
-                      msg+=`${icon} ${p.name}: สั่ง ${p.ordered} / ได้ ${got} ${p.unit}`
+                      msg+=`${icon} ${p.name} (${p._staff}): สั่ง ${p.ordered} / ได้ ${got} ${p.unit}`
                       if(diff!==0) msg+=` (${diff>0?"+":""}${diff})`
                       msg+="\n"
                     })
@@ -602,15 +611,16 @@ export default function App() {
                     const targets=groupIds.filter(g=>{const t=g.types||["all"];return t.includes("all")||t.includes("morning")})
                     if(targets.length>0&&lineToken){
                       apiSendLine(msg,lineToken,targets)
-                      // ล้าง approved order ของเครื่องนี้
-                      const newApproved=approvedOrders.filter(a=>a.deviceId!==deviceId)
-                      setApprovedOrders(newApproved); persist.approvedOrders(newApproved)
+                      // ล้าง approved orders ที่เช็คแล้ว (เฉพาะ zone ที่กรอง)
+                      if(zFilter==="all"){
+                        setApprovedOrders([]); persist.approvedOrders([])
+                      }
                       setDeliveryCheck({})
                       showToast("✅ ส่งรายงานเช็คของแล้ว!",C.green,true)
                     } else {
                       showToast("⚠️ ไม่มีกลุ่ม LINE ที่รับประเภทนี้",C.orange)
                     }
-                  }}>📲 ส่งรายงานเช็คของ</BigBtn>
+                  }}>📲 ส่งรายงานเช็คของ ({filteredItems.length} รายการ)</BigBtn>
                 </div>
               )
             })():(
