@@ -35,15 +35,28 @@ export default function App() {
   const [myName, setMyName] = useState(()=>localStorage.getItem("mk_myName")||"")
   const [showNamePick, setShowNamePick] = useState(false)
 
-  // สั่งของ — pending approval
-  const [pendingOrder, setPendingOrderR] = useState(null) // {items, staff, ts, note}
-  const [showApprove, setShowApprove]   = useState(false)
-  const [approveItems, setApproveItems] = useState([])   // editable copy
+  // order เก็บใน localStorage ต่อเครื่อง (ไม่ sync กลาง)
+  const [localOrder, setLocalOrder] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem("mk_localOrder")||"{}") } catch { return {} }
+  })
+  const saveLocalOrder = (o) => { setLocalOrder(o); localStorage.setItem("mk_localOrder", JSON.stringify(o)) }
+
+  // pendingOrders — array แยกตามคน
+  const [pendingOrders, setPendingOrdersR] = useState([])
+  const [approvedOrders, setApprovedOrders] = useState([])
+  const [showApprove, setShowApprove]      = useState(false)
+  const [approveIdx, setApproveIdx]        = useState(0)   // index ที่กำลังอนุมัติ
+  const [approveItems, setApproveItems]    = useState([])
   const [approveSending, setApproveSending] = useState(false)
 
-  // เช็คของที่สั่ง (delivery check)
-  const [deliveryCheck, setDeliveryCheck] = useState({}) // {productId: {got, extra}}
-  const [showDelivery, setShowDelivery]   = useState(false)
+  // เช็คของที่สั่ง — เก็บต่อเครื่อง หลังอนุมัติแล้วเท่านั้น
+  const [approvedOrder, setApprovedOrder] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem("mk_approvedOrder")||"null") } catch { return null }
+  })
+  const [deliveryCheck, setDeliveryCheck] = useState({})
+
+  // หา pendingOrder ของเครื่องนี้
+  const myPending = pendingOrders.find(p=>p.staff===myName&&p.deviceId===localStorage.getItem("mk_deviceId"))
   const [lineSelStaff, setLineSelStaff]   = useState("")
   const [lineSelZones, setLineSelZones]   = useState([])
   const [sending, setSending]             = useState(false)
@@ -95,6 +108,10 @@ export default function App() {
 
   useEffect(() => {
     // โหลดครั้งแรก
+    // สร้าง deviceId ถ้ายังไม่มี
+    if(!localStorage.getItem("mk_deviceId")){
+      localStorage.setItem("mk_deviceId", "dev_"+Math.random().toString(36).slice(2,10))
+    }
     loadAll().then(d => {
       setProductsR(d.products); setZonesR(d.zones); setShopsR(d.shops)
       setHistoryR(d.history);   setLineToken(d.token); setTokenInput(d.token)
@@ -102,7 +119,8 @@ export default function App() {
       setActiveStaffR(d.activeStaff||"")
       setNextIdR(d.nextId)
       if(d.ownerPin) setOwnerPin(d.ownerPin)
-      if(d.pendingOrder) setPendingOrderR(d.pendingOrder)
+      if(d.pendingOrders) setPendingOrdersR(d.pendingOrders)
+      if(d.approvedOrders) setApprovedOrders(d.approvedOrders)
       setLoaded(true)
     })
 
@@ -117,7 +135,8 @@ export default function App() {
       if (data.activeStaff!=null) setActiveStaffR(data.activeStaff)
       if (data.nextId)      setNextIdR(data.nextId)
       if (data.ownerPin)     setOwnerPin(data.ownerPin)
-      if ("pendingOrder" in data) setPendingOrderR(data.pendingOrder)
+      if ("pendingOrders" in data) setPendingOrdersR(data.pendingOrders||[])
+      if ("approvedOrders" in data) setApprovedOrders(data.approvedOrders||[])
     })
     const unsubHistory = subscribeHistory(history => {
       setHistoryR(history)
@@ -483,110 +502,111 @@ export default function App() {
               ))}
             </div>
 
-            {/* เช็คของที่สั่ง — โชว์รายการที่สั่งไว้ */}
+            {/* เช็คของที่สั่ง — โชว์รายการที่อนุมัติแล้วเท่านั้น */}
             {round==="morning"?(()=>{
-              // ต้องรออนุมัติก่อน
-              if(pendingOrder){
-                return (
-                  <div style={{textAlign:"center",padding:"32px 16px"}}>
-                    <div style={{fontSize:40,marginBottom:12}}>⏳</div>
-                    <div style={{fontSize:16,fontWeight:800,color:C.orange,marginBottom:8}}>
-                      รอเจ้าของอนุมัติรายการก่อน
-                    </div>
-                    <div style={{fontSize:13,color:C.textMute}}>
-                      จาก: {pendingOrder.staff} · {new Date(pendingOrder.ts).toLocaleTimeString("th-TH")}
-                    </div>
-                  </div>
-                )
-              }
-              const orderedProds = filteredProds.filter(p=>p.order>0)
-              const extraItems = Object.entries(deliveryCheck)
+              const deviceId=localStorage.getItem("mk_deviceId")
+              const myPendingNow=pendingOrders.find(p=>p.deviceId===deviceId)
+              const myApproved=approvedOrders.find(a=>a.deviceId===deviceId)
+
+              if(myPendingNow) return (
+                <div style={{textAlign:"center",padding:"32px 16px"}}>
+                  <div style={{fontSize:40,marginBottom:12}}>⏳</div>
+                  <div style={{fontSize:16,fontWeight:800,color:C.orange,marginBottom:8}}>รอเจ้าของอนุมัติก่อน</div>
+                  <div style={{fontSize:13,color:C.textMute}}>{new Date(myPendingNow.ts).toLocaleTimeString("th-TH")}</div>
+                </div>
+              )
+              if(!myApproved) return (
+                <div style={{textAlign:"center",padding:"32px 16px"}}>
+                  <div style={{fontSize:40,marginBottom:12}}>📋</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.textMute}}>ยังไม่มีรายการที่อนุมัติแล้ว</div>
+                  <div style={{fontSize:13,color:C.textMute,marginTop:8}}>ไปกรอกรายการสั่งของก่อน</div>
+                </div>
+              )
+
+              const orderedProds=myApproved.items||[]
+              const extraItems=Object.entries(deliveryCheck)
                 .filter(([k])=>k.startsWith("extra_"))
                 .map(([k,v])=>({key:k,...v}))
+
               return (
                 <div>
-                  {orderedProds.length===0?(
-                    <div style={{textAlign:"center",padding:"32px 0",color:C.textMute,fontSize:14}}>
-                      ยังไม่มีรายการสั่ง — ไปกรอกที่เมนูสั่งของก่อน
-                    </div>
-                  ):(
-                    <LCard>
-                      <div style={{fontSize:12,color:C.textMute,marginBottom:12,fontWeight:700}}>
-                        กรอกว่าของมาจริงเท่าไหร่
-                      </div>
-                      {orderedProds.map((p,i)=>{
-                        const got = deliveryCheck[p.id]?.got ?? p.order
-                        const diff = got - p.order
-                        return (
-                          <div key={p.id} style={{padding:"12px 0",
-                            borderBottom:i<orderedProds.length-1?`1px solid ${C.border}`:"none"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                              <div style={{flex:1}}>
-                                <div style={{fontSize:15,fontWeight:700,color:C.text}}>{p.name}</div>
-                                <div style={{fontSize:12,color:C.textMute}}>
-                                  สั่งไว้ <strong style={{color:C.primary}}>{p.order}</strong> {p.unit}
-                                  {diff!==0&&<span style={{marginLeft:8,fontWeight:700,
-                                    color:diff>0?C.green:C.red}}>
-                                    {diff>0?`+${diff}`:`${diff}`} {p.unit}
-                                  </span>}
-                                </div>
+                  <div style={{background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:10,
+                    padding:"10px 14px",fontSize:13,color:C.green,fontWeight:700,marginBottom:12}}>
+                    ✅ เจ้าของอนุมัติแล้ว — กรอกว่าของมาจริงเท่าไหร่
+                  </div>
+                  <LCard>
+                    {orderedProds.map((p,i)=>{
+                      const got=deliveryCheck[p.id]?.got??p.ordered
+                      const diff=got-p.ordered
+                      return (
+                        <div key={p.id} style={{padding:"12px 0",
+                          borderBottom:i<orderedProds.length-1?`1px solid ${C.border}`:"none"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:15,fontWeight:700,color:C.text}}>{p.name}</div>
+                              <div style={{fontSize:12,color:C.textMute}}>
+                                สั่งไว้ <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
+                                {diff!==0&&<span style={{marginLeft:8,fontWeight:700,
+                                  color:diff>0?C.green:C.red}}>
+                                  {diff>0?`+${diff}`:`${diff}`} {p.unit}
+                                </span>}
                               </div>
-                              <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[p.id]:{got:v}}))}/>
                             </div>
+                            <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[p.id]:{got:v}}))}/>
                           </div>
-                        )
-                      })}
-                      {/* ของนอกรายการ */}
-                      {extraItems.length>0&&(
-                        <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:12,color:C.textMute,fontWeight:700,marginBottom:8}}>ของนอกรายการ:</div>
-                          {extraItems.map((ex,i)=>(
-                            <div key={ex.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                              <input value={ex.name||""} onChange={e=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,name:e.target.value}}))}
-                                placeholder="ชื่อของ" style={{...lInp(),flex:1,padding:"6px 10px",fontSize:13}}/>
-                              <QBox value={ex.qty||0} onChange={v=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,qty:v}}))}/>
-                              <DelBtn onClick={()=>setDeliveryCheck(dc=>{const n={...dc};delete n[ex.key];return n})}/>
-                            </div>
-                          ))}
                         </div>
-                      )}
-                      <button onClick={()=>{
-                        const key=`extra_${Date.now()}`
-                        setDeliveryCheck(dc=>({...dc,[key]:{name:"",qty:0}}))
-                      }} style={{width:"100%",padding:"8px",borderRadius:10,
-                        border:`1.5px dashed ${C.border2}`,background:"transparent",
-                        color:C.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:10}}>
-                        + เพิ่มของนอกรายการ
-                      </button>
-                    </LCard>
-                  )}
+                      )
+                    })}
+                    {extraItems.length>0&&(
+                      <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:12,color:C.textMute,fontWeight:700,marginBottom:8}}>ของนอกรายการ:</div>
+                        {extraItems.map(ex=>(
+                          <div key={ex.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                            <input value={ex.name||""} onChange={e=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,name:e.target.value}}))}
+                              placeholder="ชื่อของ" style={{...lInp(),flex:1,padding:"6px 10px",fontSize:13}}/>
+                            <QBox value={ex.qty||0} onChange={v=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,qty:v}}))}/>
+                            <DelBtn onClick={()=>setDeliveryCheck(dc=>{const n={...dc};delete n[ex.key];return n})}/>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={()=>{
+                      const key=`extra_${Date.now()}`
+                      setDeliveryCheck(dc=>({...dc,[key]:{name:"",qty:0}}))
+                    }} style={{width:"100%",padding:"8px",borderRadius:10,
+                      border:`1.5px dashed ${C.border2}`,background:"transparent",
+                      color:C.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:10}}>
+                      + เพิ่มของนอกรายการ
+                    </button>
+                  </LCard>
                   <BigBtn color={C.line} onClick={()=>{
-                    // สร้างข้อความแจ้งครบ/ขาด/เกิน
-                    const now = new Date()
-                    const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
-                    let msg = `📦 รายงานเช็คของที่สั่ง\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n──────────────\n`
-                    let hasIssue = false
+                    const now=new Date()
+                    const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
+                    let msg=`📦 รายงานเช็คของที่สั่ง\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n──────────────\n`
+                    let hasIssue=false
                     orderedProds.forEach(p=>{
-                      const got = deliveryCheck[p.id]?.got ?? p.order
-                      const diff = got - p.order
-                      let icon = "✅"
-                      if(diff < 0){ icon = "🔴"; hasIssue = true }
-                      else if(diff > 0){ icon = "🟡"; hasIssue = true }
-                      msg += `${icon} ${p.name}: สั่ง ${p.order} / ได้ ${got} ${p.unit}`
-                      if(diff!==0) msg += ` (${diff>0?"+":""}${diff})`
-                      msg += "\n"
+                      const got=deliveryCheck[p.id]?.got??p.ordered
+                      const diff=got-p.ordered
+                      let icon="✅"
+                      if(diff<0){icon="🔴";hasIssue=true}
+                      else if(diff>0){icon="🟡";hasIssue=true}
+                      msg+=`${icon} ${p.name}: สั่ง ${p.ordered} / ได้ ${got} ${p.unit}`
+                      if(diff!==0) msg+=` (${diff>0?"+":""}${diff})`
+                      msg+="\n"
                     })
                     if(extraItems.length>0){
-                      msg += `\n📋 ของนอกรายการ:\n`
-                      extraItems.forEach(ex=>{ if(ex.name) msg += `➕ ${ex.name}: ${ex.qty||0}\n` })
+                      msg+=`\n📋 ของนอกรายการ:\n`
+                      extraItems.forEach(ex=>{if(ex.name) msg+=`➕ ${ex.name}: ${ex.qty||0}\n`})
                     }
-                    msg += `\n${hasIssue?"⚠️ มีรายการที่ไม่ครบ/เกิน":"✅ ของครบทุกรายการ"}`
-                    // ส่งไปกลุ่มที่รับ morning
-                    const targets = groupIds.filter(g=>{const t=g.types||["all"];return t.includes("all")||t.includes("morning")})
+                    msg+=`\n${hasIssue?"⚠️ มีรายการที่ไม่ครบ/เกิน":"✅ ของครบทุกรายการ"}`
+                    const targets=groupIds.filter(g=>{const t=g.types||["all"];return t.includes("all")||t.includes("morning")})
                     if(targets.length>0&&lineToken){
-                      apiSendLine(msg, lineToken, targets)
-                      showToast("✅ ส่งรายงานเช็คของแล้ว!",C.green,true)
+                      apiSendLine(msg,lineToken,targets)
+                      // ล้าง approved order ของเครื่องนี้
+                      const newApproved=approvedOrders.filter(a=>a.deviceId!==deviceId)
+                      setApprovedOrders(newApproved); persist.approvedOrders(newApproved)
                       setDeliveryCheck({})
+                      showToast("✅ ส่งรายงานเช็คของแล้ว!",C.green,true)
                     } else {
                       showToast("⚠️ ไม่มีกลุ่ม LINE ที่รับประเภทนี้",C.orange)
                     }
@@ -661,17 +681,18 @@ export default function App() {
                           </select>
                           {isOwner&&<div style={{fontSize:12,color:C.textMute,marginTop:5}}>฿{p.cost}/{p.unit}</div>}
                         </div>
-                        <QBox value={p.order||0} onChange={v=>updProd(p.id,"order",v)}/>
+                        <QBox value={localOrder[p.id]||0}
+                          onChange={v=>saveLocalOrder({...localOrder,[p.id]:v})}/>
                       </div>
                     ))}
                   </LCard>
                 </div>
               )
             })}
-            {/* ปุ่มส่งขออนุมัติ */}
             {(()=>{
-              const hasOrder = products.some(p=>p.order>0)
-              const senderName = myName || "ไม่ระบุ"
+              const hasOrder=Object.values(localOrder).some(v=>v>0)
+              const deviceId=localStorage.getItem("mk_deviceId")
+              const myPendingNow=pendingOrders.find(p=>p.deviceId===deviceId)
               return (
                 <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:8}}>
                   {!myName&&(
@@ -683,46 +704,64 @@ export default function App() {
                         cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:12}}>เลือกชื่อ</button>
                     </div>
                   )}
-                  {pendingOrder&&(
+                  {myPendingNow&&(
                     <div style={{background:C.orangeBg,border:`1px solid ${C.orange}`,borderRadius:10,
                       padding:"10px 14px",fontSize:13,color:C.orange,fontWeight:700}}>
-                      ⏳ มีรายการรออนุมัติอยู่ ({pendingOrder.staff}) — รอเจ้าของก่อน
+                      ⏳ รายการของคุณรออนุมัติอยู่ — รอเจ้าของก่อน
                     </div>
                   )}
-                  <BigBtn color={hasOrder&&myName&&!pendingOrder?C.primary:"#aaa"}
+                  <BigBtn color={hasOrder&&myName&&!myPendingNow?C.primary:"#aaa"}
                     onClick={()=>{
                       if(!myName){setShowNamePick(true);return}
                       if(!hasOrder){showToast("⚠️ ยังไม่มีรายการสั่ง",C.orange);return}
-                      if(pendingOrder){showToast("⏳ มีรายการรออนุมัติอยู่แล้ว",C.orange);return}
-                      const items=products.filter(p=>p.order>0).map(p=>({
-                        id:p.id,name:p.name,unit:p.unit,shop:p.shop,
-                        zone:p.zone,ordered:p.order,cost:p.cost,bar:p.bar||""
-                      }))
-                      const po={items,staff:senderName,ts:Date.now(),note:""}
-                      setPendingOrderR(po); persist.pendingOrder(po)
+                      if(myPendingNow){showToast("⏳ รายการของคุณรออนุมัติอยู่แล้ว",C.orange);return}
+                      const did=localStorage.getItem("mk_deviceId")
+                      const items=products.filter(p=>localOrder[p.id]>0)
+                        .map(p=>({id:p.id,name:p.name,unit:p.unit,shop:p.shop,
+                          zone:p.zone,ordered:localOrder[p.id],cost:p.cost,bar:p.bar||""}))
+                      const po={id:`po_${Date.now()}`,items,staff:myName,deviceId:did,ts:Date.now()}
+                      const newOrders=[...pendingOrders,po]
+                      setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
+                      saveLocalOrder({})
                       const ownerGroups=groupIds.filter(g=>(g.types||["all"]).includes("all"))
                       if(ownerGroups.length>0&&lineToken){
-                        const alertMsg=`🔔 มีรายการสั่งของรออนุมัติ\n👤 จาก: ${senderName}\n⏰ ${new Date().toLocaleTimeString("th-TH")}\n──────────────\n`+
+                        const alertMsg=`🔔 มีรายการสั่งของรออนุมัติ\n👤 จาก: ${myName}\n⏰ ${new Date().toLocaleTimeString("th-TH")}\n──────────────\n`+
                           items.map(it=>`🛒 ${it.name}: ${it.ordered} ${it.unit}`).join("\n")+
                           `\n──────────────\nกรุณาเปิดแอปเพื่ออนุมัติ`
                         apiSendLine(alertMsg,lineToken,ownerGroups)
                       }
                       showToast("✅ ส่งขออนุมัติแล้ว!",C.green,true)
                     }}>
-                    📋 {pendingOrder?"รอเจ้าของอนุมัติ...":"ส่งขออนุมัติเจ้าของ"}
+                    📋 {myPendingNow?"⏳ รอเจ้าของอนุมัติ...":"ส่งขออนุมัติเจ้าของ"}
                   </BigBtn>
-                  {isOwner&&pendingOrder&&(
-                    <BigBtn color={C.purple} onClick={()=>{
-                      setApproveItems(pendingOrder.items.map(it=>({...it})))
-                      setShowApprove(true)
-                    }}>🔴 อนุมัติรายการสั่งของ ({pendingOrder.staff})</BigBtn>
+                  {isOwner&&pendingOrders.length>0&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.red}}>
+                        🔴 รายการรออนุมัติ ({pendingOrders.length} รายการ)
+                      </div>
+                      {pendingOrders.map((po,idx)=>(
+                        <button key={po.id} onClick={()=>{
+                          setApproveIdx(idx)
+                          setApproveItems(po.items.map(it=>({...it})))
+                          setShowApprove(true)
+                        }} style={{width:"100%",padding:"12px 14px",borderRadius:12,
+                          border:`2px solid ${C.red}`,background:C.redBg,
+                          color:C.red,fontSize:14,fontWeight:700,cursor:"pointer",
+                          fontFamily:"inherit",textAlign:"left"}}>
+                          🔴 {po.staff} — {po.items.length} รายการ
+                          <span style={{fontSize:12,fontWeight:400,marginLeft:8,color:C.textMute}}>
+                            {new Date(po.ts).toLocaleTimeString("th-TH")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               )
             })()}
           </div>
         )}
-        {tab==="summary"&&isOwner&&(
+                {tab==="summary"&&isOwner&&(
           <div>
             {(()=>{
               const thMonths=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
@@ -1314,16 +1353,29 @@ export default function App() {
               แก้ไขจำนวนหรือเพิ่มรายการได้ก่อนอนุมัติ
             </div>
             {approveItems.map((it,i)=>(
-              <div key={it.id} style={{display:"flex",alignItems:"center",gap:10,
-                padding:"12px 14px",background:C.bgCard,borderRadius:12,marginBottom:8,
+              <div key={it.id||i} style={{padding:"12px 14px",background:C.bgCard,borderRadius:12,marginBottom:8,
                 border:`1px solid ${C.border}`}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.text}}>{it.name}</div>
-                  <div style={{fontSize:12,color:C.textMute}}>{it.unit} · {it.shop}</div>
+                {/* ชื่อ — แก้ไขได้ถ้าเป็นรายการเพิ่ม */}
+                {it.id?.toString().startsWith("extra_")
+                  ? <input value={it.name||""} onChange={e=>setApproveItems(items=>
+                      items.map((x,j)=>j===i?{...x,name:e.target.value}:x))}
+                      placeholder="ชื่อรายการ เช่น กุ้งล็อบสเตอร์"
+                      autoFocus
+                      style={{width:"100%",padding:"8px 10px",borderRadius:8,fontSize:14,
+                        border:`1.5px solid ${C.primary}`,background:C.bg,color:C.text,
+                        fontFamily:"inherit",marginBottom:8,boxSizing:"border-box"}}/>
+                  : <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:4}}>{it.name}</div>
+                }
+                <div style={{fontSize:12,color:C.textMute,marginBottom:8}}>
+                  {it.unit&&`${it.unit}`}{it.shop&&` · ${it.shop}`}
                 </div>
-                <QBox value={it.ordered} onChange={v=>setApproveItems(items=>
-                  items.map((x,j)=>j===i?{...x,ordered:v}:x))}/>
-                <DelBtn onClick={()=>setApproveItems(items=>items.filter((_,j)=>j!==i))}/>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <QBox value={it.ordered} onChange={v=>setApproveItems(items=>
+                    items.map((x,j)=>j===i?{...x,ordered:v}:x))}/>
+                  <span style={{fontSize:12,color:C.textMute}}>{it.unit}</span>
+                  <div style={{flex:1}}/>
+                  <DelBtn onClick={()=>setApproveItems(items=>items.filter((_,j)=>j!==i))}/>
+                </div>
               </div>
             ))}
             <button onClick={()=>{
@@ -1366,10 +1418,28 @@ export default function App() {
                   filteredItems.map(it=>`🛒 ${it.name}: ${it.ordered} ${it.unit}${it.shop?` (${it.shop})`:""}`).join("\n")
                 await apiSendLine(msg,lineToken,[g])
               }
-              setPendingOrderR(null); persist.pendingOrder(null)
-              // reset order ทุกรายการเป็น 0
-              const resetProds = products.map(p=>({...p,order:0}))
-              setProducts(resetProds); persist.products(resetProds)
+              const po = pendingOrders[approveIdx]
+              if(!po) return
+              for(const g of targetGroups){
+                const shopF=g.shops||["all"]
+                const barF=g.bars||["all"]
+                const filteredItems=approveItems.filter(it=>{
+                  const shopOk=shopF.includes("all")||shopF.includes(it.zone)
+                  const barOk=barF.includes("all")||barF.includes(it.bar)
+                  return shopOk&&barOk&&it.ordered>0&&it.name
+                })
+                if(filteredItems.length===0)continue
+                const msg=`📦 รายการสั่งของ (อนุมัติแล้ว)\n👤 สั่งโดย: ${po.staff}\n✅ อนุมัติโดย: เจ้าของ\n──────────────\n`+
+                  filteredItems.map(it=>`🛒 ${it.name}: ${it.ordered} ${it.unit}${it.shop?` (${it.shop})`:""}`).join("\n")
+                await apiSendLine(msg,lineToken,[g])
+              }
+              // ลบออกจาก pendingOrders
+              const newOrders=pendingOrders.filter((_,i)=>i!==approveIdx)
+              setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
+              // เก็บ approvedOrders ใน Firebase เพื่อให้เครื่องพนักงาน sync ได้
+              const approvedEntry={items:approveItems,staff:po.staff,deviceId:po.deviceId,ts:Date.now()}
+              const newApproved=[...approvedOrders.filter(a=>a.deviceId!==po.deviceId),approvedEntry]
+              setApprovedOrders(newApproved); persist.approvedOrders(newApproved)
               setApproveSending(false); setShowApprove(false)
               showToast("✅ อนุมัติและส่ง LINE แล้ว!",C.green,true)
             }} disabled={approveSending}
