@@ -716,10 +716,11 @@ export default function App() {
                       if(!hasOrder){showToast("⚠️ ยังไม่มีรายการสั่ง",C.orange);return}
                       if(myPendingNow){showToast("⏳ รายการของคุณรออนุมัติอยู่แล้ว",C.orange);return}
                       const did=localStorage.getItem("mk_deviceId")
+                      const staffName = typeof myName==="object" ? (myName?.name||myName?.label||String(myName)) : String(myName)
                       const items=products.filter(p=>localOrder[p.id]>0)
                         .map(p=>({id:p.id,name:p.name,unit:p.unit,shop:p.shop,
                           zone:p.zone,ordered:localOrder[p.id],cost:p.cost,bar:p.bar||""}))
-                      const po={id:`po_${Date.now()}`,items,staff:myName,deviceId:did,ts:Date.now()}
+                      const po={id:`po_${Date.now()}`,items,staff:staffName,deviceId:did,ts:Date.now()}
                       const newOrders=[...pendingOrders,po]
                       setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
                       saveLocalOrder({})
@@ -739,7 +740,9 @@ export default function App() {
                       <div style={{fontSize:13,fontWeight:700,color:C.red}}>
                         🔴 รายการรออนุมัติ ({pendingOrders.length} รายการ)
                       </div>
-                      {pendingOrders.map((po,idx)=>(
+                      {pendingOrders.map((po,idx)=>{
+                        const staffName = typeof po.staff==="object" ? (po.staff?.name||po.staff?.label||JSON.stringify(po.staff)) : String(po.staff||"ไม่ระบุ")
+                        return (
                         <button key={po.id} onClick={()=>{
                           setApproveIdx(idx)
                           setApproveItems(po.items.map(it=>({...it})))
@@ -748,12 +751,13 @@ export default function App() {
                           border:`2px solid ${C.red}`,background:C.redBg,
                           color:C.red,fontSize:14,fontWeight:700,cursor:"pointer",
                           fontFamily:"inherit",textAlign:"left"}}>
-                          🔴 {po.staff} — {po.items.length} รายการ
+                          🔴 {staffName} — {po.items.length} รายการ
                           <span style={{fontSize:12,fontWeight:400,marginLeft:8,color:C.textMute}}>
                             {new Date(po.ts).toLocaleTimeString("th-TH")}
                           </span>
                         </button>
-                      ))}
+                      )})}
+
                     </div>
                   )}
                 </div>
@@ -1345,7 +1349,7 @@ export default function App() {
               style={{background:"none",border:"none",fontSize:26,cursor:"pointer",color:C.textMute}}>←</button>
             <div style={{flex:1}}>
               <div style={{fontSize:17,fontWeight:800,color:C.text}}>🔴 อนุมัติรายการสั่งของ</div>
-              <div style={{fontSize:12,color:C.textMute}}>จาก: {pendingOrders[approveIdx]?.staff} · {new Date(pendingOrders[approveIdx]?.ts).toLocaleTimeString("th-TH")}</div>
+              <div style={{fontSize:12,color:C.textMute}}>จาก: {typeof pendingOrders[approveIdx]?.staff==="object"?(pendingOrders[approveIdx]?.staff?.name||"ไม่ระบุ"):String(pendingOrders[approveIdx]?.staff||"ไม่ระบุ")} · {new Date(pendingOrders[approveIdx]?.ts).toLocaleTimeString("th-TH")}</div>
             </div>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
