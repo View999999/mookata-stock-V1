@@ -1265,7 +1265,7 @@ export default function App() {
             <span style={{fontSize:12,fontWeight:tab===t.id?800:500}}>{t.label}</span>
             {tab===t.id&&<span style={{width:20,height:3,borderRadius:2,background:C.primary}}/>}
             {/* badge รออนุมัติ */}
-            {t.id==="order"&&pendingOrder&&(
+            {t.id==="order"&&pendingOrders.length>0&&(
               <span style={{position:"absolute",top:8,right:"50%",marginRight:-18,
                 width:16,height:16,borderRadius:"50%",background:C.red,
                 display:"flex",alignItems:"center",justifyContent:"center",
@@ -1336,7 +1336,7 @@ export default function App() {
       )}
 
       {/* ── Popup อนุมัติ (เจ้าของ) ── */}
-      {showApprove&&pendingOrder&&(
+      {showApprove&&pendingOrders.length>0&&(
         <div style={{position:"fixed",inset:0,zIndex:800,background:C.bg,
           display:"flex",flexDirection:"column",maxWidth:720,margin:"0 auto"}}>
           <div style={{background:C.bgCard,borderBottom:`1px solid ${C.border}`,
@@ -1345,7 +1345,7 @@ export default function App() {
               style={{background:"none",border:"none",fontSize:26,cursor:"pointer",color:C.textMute}}>←</button>
             <div style={{flex:1}}>
               <div style={{fontSize:17,fontWeight:800,color:C.text}}>🔴 อนุมัติรายการสั่งของ</div>
-              <div style={{fontSize:12,color:C.textMute}}>จาก: {pendingOrder.staff} · {new Date(pendingOrder.ts).toLocaleTimeString("th-TH")}</div>
+              <div style={{fontSize:12,color:C.textMute}}>จาก: {pendingOrders[approveIdx]?.staff} · {new Date(pendingOrders[approveIdx]?.ts).toLocaleTimeString("th-TH")}</div>
             </div>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
@@ -1414,7 +1414,7 @@ export default function App() {
                   return shopOk&&barOk&&it.ordered>0&&it.name
                 })
                 if(filteredItems.length===0)continue
-                const msg=`📦 รายการสั่งของ (อนุมัติแล้ว)\n👤 สั่งโดย: ${pendingOrder.staff}\n✅ อนุมัติโดย: เจ้าของ\n──────────────\n`+
+                const msg=`📦 รายการสั่งของ (อนุมัติแล้ว)\n👤 สั่งโดย: ${pendingOrders[approveIdx]?.staff}\n✅ อนุมัติโดย: เจ้าของ\n──────────────\n`+
                   filteredItems.map(it=>`🛒 ${it.name}: ${it.ordered} ${it.unit}${it.shop?` (${it.shop})`:""}`).join("\n")
                 await apiSendLine(msg,lineToken,[g])
               }
