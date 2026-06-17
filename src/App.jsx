@@ -1225,29 +1225,39 @@ export default function App() {
             <div style={{marginBottom:14}}>
               <input value={myName} onChange={e=>setMyName(e.target.value)}
                 placeholder="พิมพ์ชื่อของคุณ..."
-                style={{...lInp(),fontSize:15,padding:"12px 14px"}}/>
-              <BigBtn color={C.primary} onClick={()=>{
-                if(!myName.trim()){showToast("⚠️ กรอกชื่อก่อน",C.orange);return}
+                style={{width:"100%",padding:"12px 14px",borderRadius:10,fontSize:15,
+                  border:`1.5px solid ${C.border}`,background:C.bg,color:C.text,
+                  fontFamily:"inherit",marginBottom:10,boxSizing:"border-box"}}/>
+              <button onClick={()=>{
+                if(!myName.trim()){return}
                 localStorage.setItem("mk_myName",myName.trim())
-                setShowNamePick(false); showToast(`✅ สวัสดี ${myName}!`,C.green)
-              }}>บันทึกชื่อ</BigBtn>
+                setShowNamePick(false)
+                showToast(`✅ สวัสดี ${myName}!`,C.green)
+              }} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",
+                background:C.primary,color:"#fff",fontSize:16,fontWeight:800,
+                cursor:"pointer",fontFamily:"inherit"}}>
+                บันทึกชื่อ
+              </button>
             </div>
-            {staff.length>0&&(
-              <>
+            {staff&&staff.length>0&&(
+              <div>
                 <div style={{fontSize:12,color:C.textMute,marginBottom:8,fontWeight:700}}>หรือเลือกจากรายชื่อ:</div>
                 {staff.map(s=>(
-                  <button key={s} onClick={()=>{
-                    setMyName(s); localStorage.setItem("mk_myName",s)
-                    setShowNamePick(false); showToast(`✅ สวัสดี ${s}!`,C.green)
+                  <button key={String(s)} onClick={()=>{
+                    setMyName(String(s))
+                    localStorage.setItem("mk_myName",String(s))
+                    setShowNamePick(false)
+                    showToast(`✅ สวัสดี ${s}!`,C.green)
                   }} style={{width:"100%",padding:"14px 16px",borderRadius:12,
                     border:`2px solid ${myName===s?C.primary:C.border}`,
                     background:myName===s?C.primaryBg:"transparent",
-                    color:myName===s?C.primary:C.text,fontSize:16,fontWeight:myName===s?800:500,
+                    color:myName===s?C.primary:C.text,fontSize:16,
+                    fontWeight:myName===s?800:500,
                     cursor:"pointer",fontFamily:"inherit",marginBottom:8,textAlign:"left"}}>
-                  {myName===s?"✓ ":""}{s}
-                </button>
+                    {myName===s?"✓ ":""}{String(s)}
+                  </button>
                 ))}
-              </>
+              </div>
             )}
           </div>
         </div>
