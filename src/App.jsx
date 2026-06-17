@@ -699,6 +699,63 @@ export default function App() {
                 </div>
               )
             })}
+
+            {/* เพิ่มรายการพิเศษ (พนักงานเพิ่มได้เอง) */}
+            {(()=>{
+              const customItems = Object.entries(localOrder)
+                .filter(([k])=>k.startsWith("custom_"))
+                .map(([k,v])=>({key:k,qty:v,...(JSON.parse(localStorage.getItem(k)||"{}"))}) )
+              return (
+                <div style={{marginBottom:16}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <span style={{fontSize:14,fontWeight:800,color:C.textSub}}>➕ รายการเพิ่มเติม</span>
+                  </div>
+                  {customItems.map((ci,i)=>(
+                    <div key={ci.key} style={{background:C.bgCard,border:`1px solid ${C.border}`,
+                      borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+                      <div style={{display:"flex",gap:8,marginBottom:8}}>
+                        <input value={ci.name||""} onChange={e=>{
+                          localStorage.setItem(ci.key, JSON.stringify({...ci,name:e.target.value}))
+                          saveLocalOrder({...localOrder}) // trigger re-render
+                          setLocalOrder(o=>({...o}))
+                        }} placeholder="ชื่อรายการ เช่น กุ้งล็อบสเตอร์"
+                          style={{...lInp(),flex:1,fontSize:14}}/>
+                        <DelBtn onClick={()=>{
+                          localStorage.removeItem(ci.key)
+                          const o={...localOrder}; delete o[ci.key]; saveLocalOrder(o)
+                        }}/>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <input value={ci.unit||""} onChange={e=>{
+                          localStorage.setItem(ci.key, JSON.stringify({...ci,unit:e.target.value}))
+                          setLocalOrder(o=>({...o}))
+                        }} placeholder="หน่วย เช่น กก."
+                          style={{...lInp(),width:80,fontSize:13,padding:"6px 10px"}}/>
+                        <select value={ci.shop||""} onChange={e=>{
+                          localStorage.setItem(ci.key, JSON.stringify({...ci,shop:e.target.value}))
+                          setLocalOrder(o=>({...o}))
+                        }} style={{...lSel(),flex:1,fontSize:12,padding:"6px 10px"}}>
+                          <option value="">เลือกร้านค้า</option>
+                          {zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
+                        </select>
+                        <QBox value={localOrder[ci.key]||0}
+                          onChange={v=>saveLocalOrder({...localOrder,[ci.key]:v})}/>
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={()=>{
+                    const key=`custom_${Date.now()}`
+                    localStorage.setItem(key, JSON.stringify({name:"",unit:"",shop:""}))
+                    saveLocalOrder({...localOrder,[key]:1})
+                  }} style={{width:"100%",padding:"10px",borderRadius:12,
+                    border:`1.5px dashed ${C.border2}`,background:"transparent",
+                    color:C.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                    + เพิ่มรายการที่ไม่มีในระบบ
+                  </button>
+                </div>
+              )
+            })()}
+
             {(()=>{
               const hasOrder=Object.values(localOrder).some(v=>v>0)
               const deviceId=localStorage.getItem("mk_deviceId")
@@ -727,12 +784,24 @@ export default function App() {
                       if(myPendingNow){showToast("⏳ รายการของคุณรออนุมัติอยู่แล้ว",C.orange);return}
                       const did=localStorage.getItem("mk_deviceId")
                       const staffName = typeof myName==="object" ? (myName?.name||myName?.label||String(myName)) : String(myName)
-                      const items=products.filter(p=>localOrder[p.id]>0)
+                      // รายการปกติ
+                      const normalItems=products.filter(p=>localOrder[p.id]>0)
                         .map(p=>({id:p.id,name:p.name,unit:p.unit,shop:p.shop,
                           zone:p.zone,ordered:localOrder[p.id],cost:p.cost,bar:p.bar||""}))
+                      // รายการที่พนักงานเพิ่มเอง
+                      const customItems=Object.entries(localOrder)
+                        .filter(([k,v])=>k.startsWith("custom_")&&v>0)
+                        .map(([k,v])=>{
+                          const info=JSON.parse(localStorage.getItem(k)||"{}")
+                          return {id:k,name:info.name||"ไม่ระบุ",unit:info.unit||"",
+                            shop:info.shop||"",zone:info.shop||"",ordered:v,cost:0,bar:""}
+                        })
+                      const items=[...normalItems,...customItems]
                       const po={id:`po_${Date.now()}`,items,staff:staffName,deviceId:did,ts:Date.now()}
                       const newOrders=[...pendingOrders,po]
                       setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
+                      // ล้าง local order + custom items
+                      Object.keys(localOrder).filter(k=>k.startsWith("custom_")).forEach(k=>localStorage.removeItem(k))
                       saveLocalOrder({})
                       const ownerGroups=groupIds.filter(g=>(g.types||["all"]).includes("all"))
                       if(ownerGroups.length>0&&lineToken){
