@@ -227,7 +227,20 @@ export default function App() {
     setActiveStaff(lineSelStaff)
   }
 
-  const saveToken = () => {
+  // Sync localOrder จาก approvedOrders เมื่อเจ้าของอนุมัติ (realtime)
+  useEffect(()=>{
+    const myDeviceId=localStorage.getItem("mk_deviceId")
+    if(!myDeviceId) return
+    const myApproved=approvedOrders.find(a=>a.deviceId===myDeviceId)
+    if(!myApproved) return
+    // อัปเดต localOrder ให้เป็นยอดที่อนุมัติแล้ว
+    const newLocal={}
+    myApproved.items.forEach(it=>{ if(it.ordered>0) newLocal[it.id]=it.ordered })
+    const currentLocal=JSON.parse(localStorage.getItem("mk_localOrder")||"{}")
+    // sync เฉพาะถ้าค่าต่างกัน
+    const isDiff=JSON.stringify(newLocal)!==JSON.stringify(currentLocal)
+    if(isDiff) saveLocalOrder(newLocal)
+  },[approvedOrders])
     setLineToken(tokenInput); persist.token(tokenInput)
     showToast(tokenInput?"✅ บันทึก Token แล้ว":"ลบ Token แล้ว")
   }
@@ -671,7 +684,12 @@ export default function App() {
                   let hasOrder=false
                   prods.forEach(p=>{
                     const closeVal=p[round]||0
-                    const orderVal=localOrder[p.id]||0
+                    // รวมยอดที่อนุมัติแล้วจากทุกเครื่อง
+                    const totalApproved=approvedOrders.reduce((sum,a)=>{
+                      const it=a.items?.find(x=>x.id===p.id)
+                      return sum+(it?.ordered||0)
+                    },0)
+                    const orderVal=totalApproved||localOrder[p.id]||0
                     const icon=closeVal===0?"🔴":closeVal<p.min?"🟡":"🟢"
                     msg+=`${icon} ${p.name}: ปิด ${closeVal} ${p.unit}`
                     if(orderVal>0){msg+=` → สั่ง ${orderVal} ${p.unit}`;hasOrder=true}
@@ -1553,7 +1571,8 @@ export default function App() {
           <div style={{padding:"16px 16px 36px",background:C.bgCard,
             borderTop:`1px solid ${C.border}`,display:"flex",gap:10}}>
             <button onClick={()=>{
-              setPendingOrderR(null); persist.pendingOrder(null)
+              const newOrders=pendingOrders.filter((_,i)=>i!==approveIdx)
+              setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
               setShowApprove(false); showToast("❌ ยกเลิกรายการแล้ว",C.red)
             }} style={{flex:1,padding:"14px",borderRadius:14,border:`2px solid ${C.red}`,
               fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",
@@ -1599,10 +1618,18 @@ export default function App() {
               // ลบออกจาก pendingOrders
               const newOrders=pendingOrders.filter((_,i)=>i!==approveIdx)
               setPendingOrdersR(newOrders); persist.pendingOrders(newOrders)
-              // เก็บ approvedOrders ใน Firebase เพื่อให้เครื่องพนักงาน sync ได้
+              // เก็บ approvedOrders ใน Firebase — เครื่องพนักงานจะ sync localOrder จากนี้
+              // approveItems คือยอดที่เจ้าของแก้แล้ว (อาจต่างจากที่พนักงานสั่ง)
               const approvedEntry={items:approveItems,staff:po.staff,deviceId:po.deviceId,ts:Date.now()}
               const newApproved=[...approvedOrders.filter(a=>a.deviceId!==po.deviceId),approvedEntry]
               setApprovedOrders(newApproved); persist.approvedOrders(newApproved)
+              // ถ้าเครื่องนี้คือเครื่องพนักงาน sync localOrder ด้วย
+              const myDeviceId=localStorage.getItem("mk_deviceId")
+              if(po.deviceId===myDeviceId){
+                const newLocal={}
+                approveItems.forEach(it=>{ newLocal[it.id]=it.ordered })
+                saveLocalOrder(newLocal)
+              }
               setApproveSending(false); setShowApprove(false)
               showToast("✅ อนุมัติและส่ง LINE แล้ว!",C.green,true)
             }} disabled={approveSending}
