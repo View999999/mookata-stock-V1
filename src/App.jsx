@@ -241,6 +241,8 @@ export default function App() {
     const isDiff=JSON.stringify(newLocal)!==JSON.stringify(currentLocal)
     if(isDiff) saveLocalOrder(newLocal)
   },[approvedOrders])
+
+  const saveToken = () => {
     setLineToken(tokenInput); persist.token(tokenInput)
     showToast(tokenInput?"✅ บันทึก Token แล้ว":"ลบ Token แล้ว")
   }
