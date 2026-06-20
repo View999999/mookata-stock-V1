@@ -30,6 +30,10 @@ export default function App() {
   const [activeStaff, setActiveStaffR] = useState("")
   const [nextId, setNextIdR]       = useState(100)
   const [loaded, setLoaded]        = useState(false)
+  const [appPin, setAppPinR]       = useState("")  // PIN ปลดล็อกแอปทั้งเครื่อง (เจ้าของตั้ง)
+  const [appUnlocked, setAppUnlocked] = useState(false) // จะเช็คจริงหลัง appPin โหลดเสร็จ
+  const [pinInput, setPinInputLock] = useState("")
+  const [pinError, setPinError]     = useState(false)
 
   // จำชื่อต่อเครื่อง (localStorage เครื่องนั้นเครื่องนี้)
   const [myName, setMyName] = useState(()=>localStorage.getItem("mk_myName")||"")
@@ -78,6 +82,7 @@ export default function App() {
   const [pinOld, setPinOld] = useState("")
   const [pinNew, setPinNew] = useState("")
   const [pinNew2, setPinNew2] = useState("")
+  const [appPinNew, setAppPinNew] = useState("")
   const [ownerPin, setOwnerPin] = useState(OWNER_PIN)
   const [toast, setToast]     = useState(null)
   const [showLinePanel, setShowLinePanel] = useState(false)
@@ -130,6 +135,16 @@ export default function App() {
       if(d.ownerPin) setOwnerPin(d.ownerPin)
       if(d.pendingOrders) setPendingOrdersR(d.pendingOrders)
       if(d.approvedOrders) setApprovedOrders(d.approvedOrders)
+      // ตั้ง appPin จาก Firebase แล้วเช็คว่าเครื่องนี้เคยปลดล็อกด้วย PIN นี้ไหม
+      const fetchedAppPin = d.appPin || ""
+      setAppPinR(fetchedAppPin)
+      if (fetchedAppPin) {
+        const unlockedWith = localStorage.getItem("mk_unlockedPin") || ""
+        setAppUnlocked(unlockedWith === fetchedAppPin)
+      } else {
+        // ยังไม่เคยตั้ง PIN เลย — ปล่อยให้ใช้งานได้ปกติ (ยังไม่ล็อก)
+        setAppUnlocked(true)
+      }
       setLoaded(true)
     })
 
@@ -146,6 +161,17 @@ export default function App() {
       if (data.ownerPin)     setOwnerPin(data.ownerPin)
       if ("pendingOrders" in data) setPendingOrdersR(data.pendingOrders||[])
       if ("approvedOrders" in data) setApprovedOrders(data.approvedOrders||[])
+      // ถ้าเจ้าของเปลี่ยน PIN ใหม่ realtime — ล็อกเครื่องนี้ทันทีถ้า PIN ไม่ตรงกับที่เคยปลดล็อก
+      if ("appPin" in data) {
+        const newPin = data.appPin || ""
+        setAppPinR(newPin)
+        if (newPin) {
+          const unlockedWith = localStorage.getItem("mk_unlockedPin") || ""
+          setAppUnlocked(unlockedWith === newPin)
+        } else {
+          setAppUnlocked(true)
+        }
+      }
     })
     const unsubHistory = subscribeHistory(history => {
       setHistoryR(history)
@@ -308,6 +334,52 @@ export default function App() {
       <div style={{fontSize:16,fontWeight:700,color:C.textMute}}>กำลังโหลด...</div>
     </div>
   )
+
+  // ── PIN Lock Screen — ล็อกทั้งแอปจนกว่าจะใส่ PIN ถูก ──
+  if (appPin && !appUnlocked) {
+    const tryUnlock = () => {
+      if (pinInput === appPin) {
+        localStorage.setItem("mk_unlockedPin", appPin)
+        setAppUnlocked(true)
+        setPinError(false)
+        setPinInputLock("")
+      } else {
+        setPinError(true)
+        setPinInputLock("")
+      }
+    }
+    return (
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",
+        minHeight:"100vh",background:C.bg,flexDirection:"column",gap:20,padding:24}}>
+        <div style={{fontSize:48}}>🔥</div>
+        <div style={{fontSize:18,fontWeight:800,color:C.text}}>สต็อกหมูกระทะ</div>
+        <div style={{fontSize:14,color:C.textMute,marginTop:-12}}>ใส่รหัสเข้าแอป</div>
+        <input
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          value={pinInput}
+          onChange={e=>{ setPinInputLock(e.target.value); setPinError(false) }}
+          onKeyDown={e=>{ if(e.key==="Enter") tryUnlock() }}
+          placeholder="••••"
+          style={{width:180,padding:"14px",borderRadius:14,fontSize:24,textAlign:"center",
+            letterSpacing:8,border:`2px solid ${pinError?C.red:C.border}`,
+            background:C.bgCard,color:C.text,fontFamily:"inherit"}}
+        />
+        {pinError && (
+          <div style={{color:C.red,fontSize:13,fontWeight:700,marginTop:-12}}>
+            ❌ รหัสไม่ถูกต้อง
+          </div>
+        )}
+        <button onClick={tryUnlock}
+          style={{width:180,padding:"14px",borderRadius:14,border:"none",
+            background:C.primary,color:"#fff",fontSize:16,fontWeight:800,
+            cursor:"pointer",fontFamily:"inherit"}}>
+          ปลดล็อก
+        </button>
+      </div>
+    )
+  }
 
   // LINE ready check
   const lineReady = lineToken && groupIds.length>0
@@ -1586,6 +1658,51 @@ export default function App() {
                     setPinOld(""); setPinNew(""); setPinNew2("")
                     showToast("✅ เปลี่ยนรหัสสำเร็จ!",C.green,true)
                   }}>🔐 บันทึกรหัสใหม่</BigBtn>
+                </div>
+              </LCard>
+            )}
+
+            {/* รหัสเข้าแอป — ปลดล็อกทั้งเครื่อง (พนักงานทุกคนใช้รหัสเดียวกัน) */}
+            {isOwner&&(
+              <LCard>
+                <ST>🔒 รหัสเข้าแอป</ST>
+                <div style={{fontSize:12,color:C.textMute,marginBottom:12,lineHeight:1.6}}>
+                  รหัสนี้ใช้ปลดล็อกแอปทั้งเครื่อง พนักงานทุกคนใช้รหัสเดียวกัน
+                  {appPin
+                    ? <span> — <strong style={{color:C.green}}>เปิดใช้งานอยู่</strong> ถ้าเปลี่ยนรหัสใหม่ ทุกเครื่องที่เคยปลดล็อกจะถูกล็อกใหม่ทันที ต้องใส่รหัสใหม่ถึงจะเข้าได้</span>
+                    : <span> — <strong style={{color:C.orange}}>ยังไม่ได้เปิดใช้งาน</strong> ตอนนี้ใครมีลิงก์ก็เข้าแอปได้เลยโดยไม่ต้องใส่รหัส</span>
+                  }
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <div>
+                    <Label2>{appPin?"รหัสเข้าแอปใหม่":"ตั้งรหัสเข้าแอป"}</Label2>
+                    <input type="password" inputMode="numeric" value={appPinNew}
+                      onChange={e=>setAppPinNew(e.target.value)}
+                      placeholder="ตัวเลข 4+ หลัก" style={lInp()}/>
+                  </div>
+                  <BigBtn color={C.primary} onClick={()=>{
+                    if(appPinNew.length<4){showToast("⚠️ รหัสต้องมีอย่างน้อย 4 หลัก",C.orange);return}
+                    setAppPinR(appPinNew)
+                    persist.appPin && persist.appPin(appPinNew)
+                    // เครื่องเจ้าของเองก็ unlock ด้วยรหัสใหม่ทันที (ไม่ต้องล็อกตัวเอง)
+                    localStorage.setItem("mk_unlockedPin", appPinNew)
+                    setAppUnlocked(true)
+                    setAppPinNew("")
+                    showToast("✅ ตั้งรหัสเข้าแอปแล้ว! เครื่องอื่นจะถูกล็อกใหม่",C.green,true)
+                  }}>🔒 บันทึกรหัสเข้าแอป</BigBtn>
+                  {appPin&&(
+                    <button onClick={()=>{
+                      if(!window.confirm("ปิดรหัสเข้าแอป? ทุกคนที่มีลิงก์จะเข้าแอปได้โดยไม่ต้องใส่รหัส"))return
+                      setAppPinR("")
+                      persist.appPin && persist.appPin("")
+                      localStorage.removeItem("mk_unlockedPin")
+                      showToast("🔓 ปิดรหัสเข้าแอปแล้ว",C.orange)
+                    }} style={{padding:"10px",borderRadius:12,border:`1.5px solid ${C.red}`,
+                      background:"transparent",color:C.red,fontSize:13,fontWeight:700,
+                      cursor:"pointer",fontFamily:"inherit"}}>
+                      ปิดการใช้งานรหัสเข้าแอป
+                    </button>
+                  )}
                 </div>
               </LCard>
             )}

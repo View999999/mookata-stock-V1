@@ -87,6 +87,7 @@ export async function loadAll() {
       activeStaff: shopData.activeStaff ?? "",
       nextId:      shopData.nextId      ?? 100,
       ownerPin:    shopData.ownerPin    ?? OWNER_PIN,
+      appPin:      shopData.appPin      ?? "",
       pendingOrders: shopData.pendingOrders ?? [],
       approvedOrders: shopData.approvedOrders ?? [],
       history,
@@ -139,6 +140,7 @@ export const persist = {
   activeStaff: (v) => saveField("activeStaff", v),
   nextId:      (v) => saveField("nextId",      v),
   ownerPin:     (v) => saveField("ownerPin",     v),
+  appPin:       (v) => saveField("appPin",       v),
   pendingOrders:(v) => saveField("pendingOrders", v),
   approvedOrders:(v) => saveField("approvedOrders", v),
   history: async (entries) => {
