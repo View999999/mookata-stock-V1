@@ -99,7 +99,7 @@ export default function App() {
   const [newGShops, setNewGShops] = useState(["all"])
   const [newGBars,  setNewGBars]  = useState(["all"])
   const [npName, setNpName]   = useState("")
-  const [npZone, setNpZone]   = useState("z0")
+  const [npZone, setNpZone]   = useState("")
   const [npUnit, setNpUnit]   = useState("")
   const [npMin, setNpMin]     = useState(5)
   const [npCost, setNpCost]   = useState(0)
@@ -617,6 +617,48 @@ export default function App() {
                       </div>
                     )
                   })}
+                  {/* รายการที่ zone ไม่ตรงกับร้านค้าจริง — โผล่ไว้กันหาย */}
+                  {(zFilterMulti.includes("all"))&&(()=>{
+                    const validZoneIds = zones.map(z=>z.id)
+                    const unassigned = filteredItems.filter(it=>!validZoneIds.includes(it.zone))
+                    if(!unassigned.length) return null
+                    return (
+                      <div style={{marginBottom:20}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <span style={{width:8,height:8,borderRadius:"50%",background:C.textMute,display:"inline-block"}}/>
+                          <span style={{fontSize:14,fontWeight:800,color:C.textMute}}>⚠️ ยังไม่ระบุร้านค้า</span>
+                        </div>
+                        <LCard>
+                          {unassigned.map((p,i)=>{
+                            const key=`${p._staff}_${p.id}`
+                            const got=deliveryCheck[key]?.got??p.ordered
+                            const diff=got-p.ordered
+                            return (
+                              <div key={key} style={{display:"grid",gridTemplateColumns:"1fr auto",
+                                alignItems:"center",gap:12,padding:"14px 0",
+                                borderBottom:i<unassigned.length-1?`1px solid ${C.border}`:"none"}}>
+                                <div>
+                                  <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                    <span style={{fontSize:16,fontWeight:700,color:C.text}}>{p.name}</span>
+                                    {diff!==0&&<span style={{fontSize:11,fontWeight:700,
+                                      color:diff>0?C.green:C.red,
+                                      background:diff>0?C.greenBg:C.redBg,
+                                      padding:"2px 8px",borderRadius:8}}>
+                                      {diff>0?`+${diff}`:`${diff}`}
+                                    </span>}
+                                  </div>
+                                  <div style={{fontSize:13,color:C.textSub,marginTop:4}}>
+                                    สั่งโดย <strong>{p._staff}</strong> · สั่ง <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
+                                  </div>
+                                </div>
+                                <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[key]:{got:v}}))}/>
+                              </div>
+                            )
+                          })}
+                        </LCard>
+                      </div>
+                    )
+                  })()}
                   {/* ของนอกรายการ */}
                   <div style={{marginBottom:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -845,6 +887,39 @@ export default function App() {
                 </div>
               )
             })}
+
+            {/* สินค้าที่ยังไม่ได้ผูกร้านค้า — โผล่ไว้กันหาย */}
+            {(orderZones.includes("all"))&&(()=>{
+              const validZoneIds = zones.map(z=>z.id)
+              const unassigned = products.filter(p=>!validZoneIds.includes(p.zone))
+              if(!unassigned.length) return null
+              return (
+                <div style={{marginBottom:20}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:C.textMute,display:"inline-block"}}/>
+                    <span style={{fontSize:14,fontWeight:800,color:C.textMute}}>⚠️ ยังไม่ระบุร้านค้า</span>
+                  </div>
+                  <LCard>
+                    {unassigned.map((p,i)=>(
+                      <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto",
+                        alignItems:"center",gap:12,padding:"14px 0",
+                        borderBottom:i<unassigned.length-1?`1px solid ${C.border}`:"none"}}>
+                        <div>
+                          <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                            <span style={{fontSize:16,fontWeight:700,color:C.text}}>{p.name}</span>
+                            <span style={{fontSize:11,background:C.redBg,color:C.red,
+                              padding:"2px 8px",borderRadius:8,fontWeight:700}}>แก้ในตั้งค่า</span>
+                          </div>
+                          <div style={{fontSize:13,color:C.textSub,marginTop:4}}>ปิดล่าสุด: {p.close} {p.unit}</div>
+                        </div>
+                        <QBox value={localOrder[p.id]||0}
+                          onChange={v=>saveLocalOrder({...localOrder,[p.id]:v})}/>
+                      </div>
+                    ))}
+                  </LCard>
+                </div>
+              )
+            })()}
 
             {/* เพิ่มรายการพิเศษ (พนักงานเพิ่มได้เอง) */}
             {(()=>{
@@ -1458,7 +1533,8 @@ export default function App() {
                   <div style={{fontSize:12,fontWeight:700,color:C.textMute,marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>เพิ่มสินค้าใหม่</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                     <input value={npName} onChange={e=>setNpName(e.target.value)} placeholder="ชื่อสินค้า" style={lInp()}/>
-                    <select value={npZone} onChange={e=>setNpZone(e.target.value)} style={lSel()}>
+                    <select value={npZone||zones[0]?.id||""} onChange={e=>setNpZone(e.target.value)} style={lSel()}>
+                      <option value="">— เลือกร้านค้า —</option>
                       {zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
                     </select>
                     <input value={npUnit} onChange={e=>setNpUnit(e.target.value)} placeholder="หน่วย" style={lInp()}/>
@@ -1470,9 +1546,12 @@ export default function App() {
                   </div>
                   <BigBtn color={C.primary} onClick={()=>{
                     if(!npName.trim())return
-                    setProducts([...products,{id:nextId,name:npName.trim(),zone:npZone,unit:npUnit||"ชิ้น",
+                    const zoneToUse = npZone||zones[0]?.id||""
+                    if(!zoneToUse){ showToast("⚠️ ต้องมีร้านค้าอย่างน้อย 1 ร้านก่อน",C.orange); return }
+                    setProducts([...products,{id:nextId,name:npName.trim(),zone:zoneToUse,unit:npUnit||"ชิ้น",
                       min:npMin,cost:npCost,morning:0,close:0,order:0,shop:npShop||shops[0]}])
                     setNextId(nextId+1); setNpName(""); setNpUnit(""); setNpMin(5); setNpCost(0)
+                    showToast("✅ เพิ่มสินค้าแล้ว")
                   }}>+ เพิ่มสินค้า</BigBtn>
                 </div>
               ):<LN>เพิ่ม/ลบสินค้า — เฉพาะเจ้าของ</LN>}
@@ -1661,28 +1740,14 @@ export default function App() {
             <button onClick={async()=>{
               if(approveSending)return
               setApproveSending(true)
+              const po = pendingOrders[approveIdx]
+              if(!po){ setApproveSending(false); return }
               const msgType="order"
-              const dk=todayKey()
               // ส่งแยกตามกลุ่ม + shop/bar filter
               const targetGroups=groupIds.filter(g=>{
                 const types=g.types||["all"]
                 return types.includes("all")||types.includes(msgType)
               })
-              for(const g of targetGroups){
-                const shopF=g.shops||["all"]
-                const barF=g.bars||["all"]
-                const filteredItems=approveItems.filter(it=>{
-                  const shopOk=shopF.includes("all")||shopF.includes(it.zone)
-                  const barOk=barF.includes("all")||barF.includes(it.bar)
-                  return shopOk&&barOk&&it.ordered>0&&it.name
-                })
-                if(filteredItems.length===0)continue
-                const msg=`📦 รายการสั่งของ (อนุมัติแล้ว)\n👤 สั่งโดย: ${pendingOrders[approveIdx]?.staff}\n✅ อนุมัติโดย: เจ้าของ\n──────────────\n`+
-                  filteredItems.map(it=>`🛒 ${it.name}: ${it.ordered} ${it.unit}${it.shop?` (${it.shop})`:""}`).join("\n")
-                await apiSendLine(msg,lineToken,[g])
-              }
-              const po = pendingOrders[approveIdx]
-              if(!po) return
               for(const g of targetGroups){
                 const shopF=g.shops||["all"]
                 const barF=g.bars||["all"]
