@@ -69,6 +69,7 @@ export default function App() {
     else if (tab === "check") setRound("morning")
   }, [tab])
   const [zFilter, setZFilter] = useState("all")
+  const [zFilterMulti, setZFilterMulti] = useState(["all"])  // multi-select สำหรับเช็คของที่สั่ง
   const [sumDate, setSumDate] = useState(null)
   const [sumZone, setSumZone]   = useState(["all"])
   const [sumBar,  setSumBar]    = useState(["all"])
@@ -84,7 +85,7 @@ export default function App() {
   const [previewMsg, setPreviewMsg]   = useState("")
   const [orderZFilter, setOrderZFilter] = useState("all")
   const [orderZones, setOrderZones]     = useState(["all"]) // multi-select สำหรับสั่งของ
-  const [closeBar, setCloseBar]         = useState("all")   // filter บาร์สำหรับปิดร้าน
+  const [closeBar, setCloseBar]         = useState(["all"])   // filter บาร์สำหรับปิดร้าน (multi-select)
   const [showToken, setShowToken] = useState(false)
   const [tokenInput, setTokenInput] = useState("")
 
@@ -541,8 +542,8 @@ export default function App() {
                 </div>
               )
 
-              // กรองตาม zone filter
-              const filteredItems = zFilter==="all" ? allItems : allItems.filter(it=>it.zone===zFilter)
+              // กรองตาม zone filter (multi-select)
+              const filteredItems = zFilterMulti.includes("all") ? allItems : allItems.filter(it=>zFilterMulti.includes(it.zone))
               const extraItems = Object.entries(deliveryCheck)
                 .filter(([k])=>k.startsWith("extra_"))
                 .map(([k,v])=>({key:k,...v}))
@@ -555,21 +556,28 @@ export default function App() {
                   </div>
                   {/* multi-select ร้านค้า เหมือนหน้าสั่งของ */}
                   <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-                    <button onClick={()=>setZFilter("all")} style={{
+                    <button onClick={()=>setZFilterMulti(["all"])} style={{
                       padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
-                      fontSize:13,border:`2px solid ${zFilter==="all"?"#475569":C.border2}`,
-                      background:zFilter==="all"?"#475569":"transparent",
-                      color:zFilter==="all"?"#fff":C.textSub}}>ทั้งหมด</button>
-                    {zones.map(z=>(
-                      <button key={z.id} onClick={()=>setZFilter(z.id)} style={{
-                        padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
-                        fontSize:13,border:`2px solid ${zFilter===z.id?z.color:C.border2}`,
-                        background:zFilter===z.id?z.color:"transparent",
-                        color:zFilter===z.id?"#fff":C.textSub}}>{z.name}</button>
-                    ))}
+                      fontSize:13,border:`2px solid ${zFilterMulti.includes("all")?"#475569":C.border2}`,
+                      background:zFilterMulti.includes("all")?"#475569":"transparent",
+                      color:zFilterMulti.includes("all")?"#fff":C.textSub}}>ทั้งหมด</button>
+                    {zones.map(z=>{
+                      const sel=!zFilterMulti.includes("all")&&zFilterMulti.includes(z.id)
+                      return (
+                        <button key={z.id} onClick={()=>{
+                          if(zFilterMulti.includes("all")){setZFilterMulti([z.id]);return}
+                          const next=sel?zFilterMulti.filter(x=>x!==z.id):[...zFilterMulti,z.id]
+                          setZFilterMulti(next.length===0?["all"]:next)
+                        }} style={{
+                          padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                          fontSize:13,border:`2px solid ${sel?z.color:C.border2}`,
+                          background:sel?z.color:"transparent",
+                          color:sel?"#fff":C.textSub}}>{z.name}</button>
+                      )
+                    })}
                   </div>
                   {/* การ์ดแยกตามโซน เหมือนหน้าสั่งของ */}
-                  {zones.filter(z=>zFilter==="all"||z.id===zFilter).map(z=>{
+                  {zones.filter(z=>zFilterMulti.includes("all")||zFilterMulti.includes(z.id)).map(z=>{
                     const zItems=filteredItems.filter(it=>it.zone===z.id)
                     if(!zItems.length) return null
                     return (
@@ -680,17 +688,29 @@ export default function App() {
         {tab==="close"&&(
           <div>
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-              {[{id:"all",label:"ทั้งหมด"},...shops.map(s=>({id:s,label:s}))].map(b=>(
-                <button key={b.id} onClick={()=>setCloseBar(b.id)} style={{
-                  padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
-                  fontSize:13,border:`2px solid ${closeBar===b.id?"#7C3AED":C.border2}`,
-                  background:closeBar===b.id?"#7C3AED":"transparent",
-                  color:closeBar===b.id?"#fff":C.textSub}}>{b.label}</button>
-              ))}
+              <button onClick={()=>setCloseBar(["all"])} style={{
+                padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                fontSize:13,border:`2px solid ${closeBar.includes("all")?"#7C3AED":C.border2}`,
+                background:closeBar.includes("all")?"#7C3AED":"transparent",
+                color:closeBar.includes("all")?"#fff":C.textSub}}>ทั้งหมด</button>
+              {shops.map(s=>{
+                const sel=!closeBar.includes("all")&&closeBar.includes(s)
+                return (
+                  <button key={s} onClick={()=>{
+                    if(closeBar.includes("all")){setCloseBar([s]);return}
+                    const next=sel?closeBar.filter(x=>x!==s):[...closeBar,s]
+                    setCloseBar(next.length===0?["all"]:next)
+                  }} style={{
+                    padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                    fontSize:13,border:`2px solid ${sel?"#7C3AED":C.border2}`,
+                    background:sel?"#7C3AED":"transparent",
+                    color:sel?"#fff":C.textSub}}>{s}</button>
+                )
+              })}
             </div>
             {(()=>{
-                  const closeProds = filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar)
-                  const barsToShow = closeBar==="all" ? shops : [closeBar]
+                  const closeProds = filteredProds.filter(p=>closeBar.includes("all")||closeBar.includes(p.shop||""))
+                  const barsToShow = closeBar.includes("all") ? shops : closeBar
                   return barsToShow.map(barName=>{
                     const bp = closeProds.filter(p=>(p.shop||"")===barName)
                     if(!bp.length) return null
@@ -725,13 +745,13 @@ export default function App() {
                     )
                   })
                 })()}
-                {filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar).length===0 && <Empty/>}
+                {filteredProds.filter(p=>closeBar.includes("all")||closeBar.includes(p.shop||"")).length===0 && <Empty/>}
                 <BigBtn color={C.line} onClick={()=>{
                   const now=new Date()
                   const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
-                  const barLabel=closeBar==="all"?"ทุกบาร์":closeBar
+                  const barLabel=closeBar.includes("all")?"ทุกบาร์":closeBar.join(", ")
                   let msg=`🌙 รายงานปิดร้าน\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n🍽 บาร์: ${barLabel}\n──────────────\n`
-                  const prods=filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar)
+                  const prods=filteredProds.filter(p=>closeBar.includes("all")||closeBar.includes(p.shop||""))
                   let hasOrder=false
                   prods.forEach(p=>{
                     const closeVal=p[round]||0
@@ -752,7 +772,7 @@ export default function App() {
                     apiSendLine(msg,lineToken,targets)
                     // reset ค่าปิดร้านเฉพาะบาร์นี้
                     const resetProds=products.map(p=>{
-                      if(closeBar==="all"||(p.shop||"")===closeBar) return {...p,[round]:0}
+                      if(closeBar.includes("all")||closeBar.includes(p.shop||"")) return {...p,[round]:0}
                       return p
                     })
                     setProducts(resetProds); persist.products(resetProds)
@@ -761,7 +781,7 @@ export default function App() {
                     saveLocalOrder({})
                     showToast("✅ ส่ง LINE ปิดร้านแล้ว!",C.green,true)
                   } else { showToast("⚠️ ไม่มีกลุ่ม LINE รับประเภทนี้",C.orange) }
-                }}>📲 ส่ง LINE ปิดร้าน{closeBar!=="all"?` (${closeBar})`:""}</BigBtn>
+                }}>📲 ส่ง LINE ปิดร้าน{!closeBar.includes("all")?` (${closeBar.join(", ")})`:""}</BigBtn>
           </div>
         )}
 
