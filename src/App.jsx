@@ -63,6 +63,11 @@ export default function App() {
 
   // UI
   const [round, setRound]   = useState("morning")
+  // sync round กับ tab ที่ active — ปิดร้านต้องใช้ round="close" เสมอ
+  useEffect(() => {
+    if (tab === "close") setRound("close")
+    else if (tab === "check") setRound("morning")
+  }, [tab])
   const [zFilter, setZFilter] = useState("all")
   const [sumDate, setSumDate] = useState(null)
   const [sumZone, setSumZone]   = useState(["all"])
@@ -262,7 +267,7 @@ export default function App() {
     const cRec  = dayRecs.find(h=>h.round==="close")
     const pcRec = prevRecs.find(h=>h.round==="close")
     const zoneOk = p => Array.isArray(zf) ? (zf.includes("all")||zf.includes(p.zone)) : (zf==="all"||p.zone===zf)
-    const barOk  = p => !bf || bf.includes("all") || bf.includes(p.bar||"")
+    const barOk  = p => !bf || bf.includes("all") || bf.includes(p.shop||"")
     return products
       .filter(p => zoneOk(p) && barOk(p))
       .map(p=>{
@@ -283,6 +288,7 @@ export default function App() {
   const TABS = [
     {id:"check",label:"เช็คของ",icon:"📋"},
     {id:"order",label:"สั่งของ",icon:"🛒"},
+    {id:"close",label:"ปิดร้าน",icon:"🌙"},
     ...(isOwner?[{id:"summary",label:"สรุป",icon:"📊"}]:[]),
     {id:"settings",label:"ตั้งค่า",icon:"⚙️"},
   ]
@@ -358,7 +364,7 @@ export default function App() {
             {/* ประเภทข้อความ (read-only แสดงค่า preset) */}
             <div style={{background:C.primaryBg,border:`1px solid ${C.primary}33`,borderRadius:10,
               padding:"8px 14px",marginBottom:16,fontSize:14,color:C.primary,fontWeight:700}}>
-              📋 ประเภท: {tab==="order"?"รายการสั่งของ":round==="morning"?"เช็คของที่สั่ง":"ปิดร้าน"}
+              📋 ประเภท: {tab==="order"?"รายการสั่งของ":tab==="close"?"ปิดร้าน":"เช็คของที่สั่ง"}
             </div>
 
             {/* เลือกพนักงาน */}
@@ -507,28 +513,10 @@ export default function App() {
       {/* Content */}
       <div style={{padding:"18px 16px 100px"}}>
 
-        {/* ═══ เช็คของ ═══ */}
+        {/* ═══ เช็คของที่สั่ง ═══ */}
         {tab==="check"&&(
           <div>
-            <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-              <RoundBtn active={round==="morning"} color={C.primary} onClick={()=>setRound("morning")}>🌅 เช็คของที่สั่ง</RoundBtn>
-              <RoundBtn active={round==="close"}   color="#475569"   onClick={()=>setRound("close")}>🌙 ปิดร้าน</RoundBtn>
-            </div>
-            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-              {/* filter บาร์ (หมวดหมู่อาหาร) */}
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                {[{id:"all",label:"ทั้งหมด"},...shops.map(s=>({id:s,label:s}))].map(b=>(
-                  <button key={b.id} onClick={()=>setCloseBar(b.id)} style={{
-                    padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
-                    fontSize:13,border:`2px solid ${closeBar===b.id?"#7C3AED":C.border2}`,
-                    background:closeBar===b.id?"#7C3AED":"transparent",
-                    color:closeBar===b.id?"#fff":C.textSub}}>{b.label}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* เช็คของที่สั่ง — เห็นทุกรายการที่อนุมัติแล้ว */}
-            {round==="morning"?(()=>{
+            {(()=>{
               const deviceId=localStorage.getItem("mk_deviceId")
               const myPendingNow=pendingOrders.find(p=>p.deviceId===deviceId)
 
@@ -684,13 +672,27 @@ export default function App() {
                   }}>📲 ส่งรายงานเช็คของ ({filteredItems.length} รายการ)</BigBtn>
                 </div>
               )
-            })():(
-              <div>
-                {(()=>{
-                  const closeProds = filteredProds.filter(p=>closeBar==="all"||(p.bar||"")===closeBar)
+            })()}
+          </div>
+        )}
+
+        {/* ═══ ปิดร้าน ═══ */}
+        {tab==="close"&&(
+          <div>
+            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+              {[{id:"all",label:"ทั้งหมด"},...shops.map(s=>({id:s,label:s}))].map(b=>(
+                <button key={b.id} onClick={()=>setCloseBar(b.id)} style={{
+                  padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                  fontSize:13,border:`2px solid ${closeBar===b.id?"#7C3AED":C.border2}`,
+                  background:closeBar===b.id?"#7C3AED":"transparent",
+                  color:closeBar===b.id?"#fff":C.textSub}}>{b.label}</button>
+              ))}
+            </div>
+            {(()=>{
+                  const closeProds = filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar)
                   const barsToShow = closeBar==="all" ? shops : [closeBar]
                   return barsToShow.map(barName=>{
-                    const bp = closeProds.filter(p=>(p.bar||"")===barName)
+                    const bp = closeProds.filter(p=>(p.shop||"")===barName)
                     if(!bp.length) return null
                     return (
                       <div key={barName} style={{marginBottom:20}}>
@@ -723,13 +725,13 @@ export default function App() {
                     )
                   })
                 })()}
-                {filteredProds.filter(p=>closeBar==="all"||(p.bar||"")===closeBar).length===0 && <Empty/>}
+                {filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar).length===0 && <Empty/>}
                 <BigBtn color={C.line} onClick={()=>{
                   const now=new Date()
                   const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
                   const barLabel=closeBar==="all"?"ทุกบาร์":closeBar
                   let msg=`🌙 รายงานปิดร้าน\n📅 ${todayStr()} ⏰ ${timeStr}\n👤 ส่งโดย: ${myName||"ไม่ระบุ"}\n🍽 บาร์: ${barLabel}\n──────────────\n`
-                  const prods=filteredProds.filter(p=>closeBar==="all"||(p.bar||"")===closeBar)
+                  const prods=filteredProds.filter(p=>closeBar==="all"||(p.shop||"")===closeBar)
                   let hasOrder=false
                   prods.forEach(p=>{
                     const closeVal=p[round]||0
@@ -750,7 +752,7 @@ export default function App() {
                     apiSendLine(msg,lineToken,targets)
                     // reset ค่าปิดร้านเฉพาะบาร์นี้
                     const resetProds=products.map(p=>{
-                      if(closeBar==="all"||(p.bar||"")===closeBar) return {...p,[round]:0}
+                      if(closeBar==="all"||(p.shop||"")===closeBar) return {...p,[round]:0}
                       return p
                     })
                     setProducts(resetProds); persist.products(resetProds)
@@ -760,8 +762,6 @@ export default function App() {
                     showToast("✅ ส่ง LINE ปิดร้านแล้ว!",C.green,true)
                   } else { showToast("⚠️ ไม่มีกลุ่ม LINE รับประเภทนี้",C.orange) }
                 }}>📲 ส่ง LINE ปิดร้าน{closeBar!=="all"?` (${closeBar})`:""}</BigBtn>
-              </div>
-            )}
           </div>
         )}
 
@@ -913,7 +913,7 @@ export default function App() {
                       // รายการปกติ
                       const normalItems=products.filter(p=>localOrder[p.id]>0)
                         .map(p=>({id:p.id,name:p.name,unit:p.unit,shop:p.shop,
-                          zone:p.zone,ordered:localOrder[p.id],cost:p.cost,bar:p.bar||""}))
+                          zone:p.zone,ordered:localOrder[p.id],cost:p.cost,bar:p.shop||""}))
                       // รายการที่พนักงานเพิ่มเอง
                       const customItems=Object.entries(localOrder)
                         .filter(([k,v])=>k.startsWith("custom_")&&v>0)
@@ -1405,9 +1405,21 @@ export default function App() {
                             style={{...lInp(),fontSize:13,padding:"6px 10px",color:C.purple,fontWeight:700}}/>
                         </div>
                         <div>
+                          <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>
+                            ร้านค้า {!p.zone&&<span style={{color:C.red,fontWeight:700}}>⚠️ ยังไม่ระบุ</span>}
+                          </div>
+                          <select value={p.zone||""} onChange={e=>updProd(p.id,"zone",e.target.value)}
+                            style={{...lSel(),fontSize:13,padding:"6px 10px",
+                              border:!p.zone?`1.5px solid ${C.red}`:undefined}}>
+                            <option value="">— เลือกร้านค้า —</option>
+                            {zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
                           <div style={{fontSize:11,color:C.textMute,marginBottom:3}}>บาร์</div>
-                          <select value={p.shop} onChange={e=>updProd(p.id,"shop",e.target.value)}
+                          <select value={p.shop||""} onChange={e=>updProd(p.id,"shop",e.target.value)}
                             style={{...lSel(),fontSize:13,padding:"6px 10px"}}>
+                            <option value="">— เลือกบาร์ —</option>
                             {shops.map(s=><option key={s}>{s}</option>)}
                           </select>
                         </div>
@@ -1415,7 +1427,7 @@ export default function App() {
                     )}
                     {!isOwner&&(
                       <div style={{paddingLeft:16,fontSize:12,color:C.textMute}}>
-                        {p.unit} · ต่ำสุด {p.min} · {p.shop}
+                        {p.unit} · ต่ำสุด {p.min} · {z.name}{p.shop?` · ${p.shop}`:""}
                       </div>
                     )}
                   </div>
@@ -1488,18 +1500,18 @@ export default function App() {
         display:"flex",zIndex:200}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1,padding:"10px 4px 14px",border:"none",background:"transparent",
+            flex:1,padding:"9px 2px 12px",border:"none",background:"transparent",
             cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",
-            alignItems:"center",gap:3,color:tab===t.id?C.primary:C.textMute,position:"relative"}}>
-            <span style={{fontSize:20}}>{t.icon}</span>
-            <span style={{fontSize:12,fontWeight:tab===t.id?800:500}}>{t.label}</span>
-            {tab===t.id&&<span style={{width:20,height:3,borderRadius:2,background:C.primary}}/>}
+            alignItems:"center",gap:2,color:tab===t.id?C.primary:C.textMute,position:"relative",minWidth:0}}>
+            <span style={{fontSize:18}}>{t.icon}</span>
+            <span style={{fontSize:11,fontWeight:tab===t.id?800:500,whiteSpace:"nowrap"}}>{t.label}</span>
+            {tab===t.id&&<span style={{width:18,height:3,borderRadius:2,background:C.primary}}/>}
             {/* badge รออนุมัติ */}
             {t.id==="order"&&pendingOrders.length>0&&(
-              <span style={{position:"absolute",top:8,right:"50%",marginRight:-18,
-                width:16,height:16,borderRadius:"50%",background:C.red,
+              <span style={{position:"absolute",top:6,right:"50%",marginRight:-16,
+                width:15,height:15,borderRadius:"50%",background:C.red,
                 display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:10,color:"#fff",fontWeight:900}}>!</span>
+                fontSize:9,color:"#fff",fontWeight:900}}>!</span>
             )}
           </button>
         ))}
