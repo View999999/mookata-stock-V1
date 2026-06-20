@@ -562,55 +562,92 @@ export default function App() {
               return (
                 <div>
                   <div style={{background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:10,
-                    padding:"10px 14px",fontSize:13,color:C.green,fontWeight:700,marginBottom:12}}>
+                    padding:"10px 14px",fontSize:13,color:C.green,fontWeight:700,marginBottom:14}}>
                     ✅ เจ้าของอนุมัติแล้ว {approvedOrders.length} รายการ — กรอกของที่มาจริง
                   </div>
-                  <LCard>
-                    {filteredItems.map((p,i)=>{
-                      const key=`${p._staff}_${p.id}`
-                      const got=deliveryCheck[key]?.got??p.ordered
-                      const diff=got-p.ordered
-                      return (
-                        <div key={key} style={{padding:"12px 0",
-                          borderBottom:i<filteredItems.length-1?`1px solid ${C.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:10}}>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:15,fontWeight:700,color:C.text}}>{p.name}</div>
-                              <div style={{fontSize:12,color:C.textMute}}>
-                                สั่งโดย <strong>{p._staff}</strong> · สั่ง <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
-                                {diff!==0&&<span style={{marginLeft:8,fontWeight:700,
-                                  color:diff>0?C.green:C.red}}>
-                                  {diff>0?`+${diff}`:`${diff}`}
-                                </span>}
-                              </div>
-                            </div>
-                            <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[key]:{got:v}}))}/>
-                          </div>
+                  {/* multi-select ร้านค้า เหมือนหน้าสั่งของ */}
+                  <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                    <button onClick={()=>setZFilter("all")} style={{
+                      padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                      fontSize:13,border:`2px solid ${zFilter==="all"?"#475569":C.border2}`,
+                      background:zFilter==="all"?"#475569":"transparent",
+                      color:zFilter==="all"?"#fff":C.textSub}}>ทั้งหมด</button>
+                    {zones.map(z=>(
+                      <button key={z.id} onClick={()=>setZFilter(z.id)} style={{
+                        padding:"6px 14px",borderRadius:20,cursor:"pointer",fontFamily:"inherit",fontWeight:700,
+                        fontSize:13,border:`2px solid ${zFilter===z.id?z.color:C.border2}`,
+                        background:zFilter===z.id?z.color:"transparent",
+                        color:zFilter===z.id?"#fff":C.textSub}}>{z.name}</button>
+                    ))}
+                  </div>
+                  {/* การ์ดแยกตามโซน เหมือนหน้าสั่งของ */}
+                  {zones.filter(z=>zFilter==="all"||z.id===zFilter).map(z=>{
+                    const zItems=filteredItems.filter(it=>it.zone===z.id)
+                    if(!zItems.length) return null
+                    return (
+                      <div key={z.id} style={{marginBottom:20}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <ZoneDot color={z.color}/>
+                          <span style={{fontSize:14,fontWeight:800,color:z.color}}>{z.name}</span>
                         </div>
-                      )
-                    })}
+                        <LCard>
+                          {zItems.map((p,i)=>{
+                            const key=`${p._staff}_${p.id}`
+                            const got=deliveryCheck[key]?.got??p.ordered
+                            const diff=got-p.ordered
+                            return (
+                              <div key={key} style={{display:"grid",gridTemplateColumns:"1fr auto",
+                                alignItems:"center",gap:12,padding:"14px 0",
+                                borderBottom:i<zItems.length-1?`1px solid ${C.border}`:"none"}}>
+                                <div>
+                                  <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                    <span style={{fontSize:16,fontWeight:700,color:C.text}}>{p.name}</span>
+                                    {diff!==0&&<span style={{fontSize:11,fontWeight:700,
+                                      color:diff>0?C.green:C.red,
+                                      background:diff>0?C.greenBg:C.redBg,
+                                      padding:"2px 8px",borderRadius:8}}>
+                                      {diff>0?`+${diff}`:`${diff}`}
+                                    </span>}
+                                  </div>
+                                  <div style={{fontSize:13,color:C.textSub,marginTop:4}}>
+                                    สั่งโดย <strong>{p._staff}</strong> · สั่ง <strong style={{color:C.primary}}>{p.ordered}</strong> {p.unit}
+                                  </div>
+                                </div>
+                                <QBox value={got} onChange={v=>setDeliveryCheck(dc=>({...dc,[key]:{got:v}}))}/>
+                              </div>
+                            )
+                          })}
+                        </LCard>
+                      </div>
+                    )
+                  })}
+                  {/* ของนอกรายการ */}
+                  <div style={{marginBottom:16}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <span style={{fontSize:14,fontWeight:800,color:C.textSub}}>➕ ของนอกรายการ</span>
+                    </div>
                     {extraItems.length>0&&(
-                      <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:12,color:C.textMute,fontWeight:700,marginBottom:8}}>ของนอกรายการ:</div>
-                        {extraItems.map(ex=>(
-                          <div key={ex.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <LCard>
+                        {extraItems.map((ex,i)=>(
+                          <div key={ex.key} style={{display:"flex",alignItems:"center",gap:8,
+                            padding:"8px 0",borderBottom:i<extraItems.length-1?`1px solid ${C.border}`:"none"}}>
                             <input value={ex.name||""} onChange={e=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,name:e.target.value}}))}
                               placeholder="ชื่อของ" style={{...lInp(),flex:1,padding:"6px 10px",fontSize:13}}/>
                             <QBox value={ex.qty||0} onChange={v=>setDeliveryCheck(dc=>({...dc,[ex.key]:{...ex,qty:v}}))}/>
                             <DelBtn onClick={()=>setDeliveryCheck(dc=>{const n={...dc};delete n[ex.key];return n})}/>
                           </div>
                         ))}
-                      </div>
+                      </LCard>
                     )}
                     <button onClick={()=>{
                       const key=`extra_${Date.now()}`
                       setDeliveryCheck(dc=>({...dc,[key]:{name:"",qty:0}}))
-                    }} style={{width:"100%",padding:"8px",borderRadius:10,
+                    }} style={{width:"100%",padding:"10px",borderRadius:12,
                       border:`1.5px dashed ${C.border2}`,background:"transparent",
-                      color:C.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:10}}>
+                      color:C.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
                       + เพิ่มของนอกรายการ
                     </button>
-                  </LCard>
+                  </div>
                   <BigBtn color={C.line} onClick={()=>{
                     const now=new Date()
                     const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
@@ -649,34 +686,44 @@ export default function App() {
               )
             })():(
               <div>
-                <LCard>
-                  {filteredProds
-                    .filter(p=>closeBar==="all"||(p.bar||"")===closeBar)
-                    .length===0
-                    ? <Empty/>
-                    : filteredProds
-                        .filter(p=>closeBar==="all"||(p.bar||"")===closeBar)
-                        .map((p,i,arr)=>{
-                        const z=zoneOf(p.zone)
-                        return (
-                          <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto",
-                            alignItems:"center",gap:12,padding:"14px 0",
-                            borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
-                            <div>
-                              <div style={{fontSize:16,fontWeight:700,color:C.text}}>{p.name}</div>
-                              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
-                                <span style={{fontSize:12,padding:"2px 10px",borderRadius:10,
-                                  background:z.color+"20",color:z.color,fontWeight:700}}>{z.name}</span>
-                                <SBadge val={p[round]||0} min={p.min}/>
-                                <span style={{fontSize:12,color:C.textMute}}>{p.unit}</span>
+                {(()=>{
+                  const closeProds = filteredProds.filter(p=>closeBar==="all"||(p.bar||"")===closeBar)
+                  const barsToShow = closeBar==="all" ? shops : [closeBar]
+                  return barsToShow.map(barName=>{
+                    const bp = closeProds.filter(p=>(p.bar||"")===barName)
+                    if(!bp.length) return null
+                    return (
+                      <div key={barName} style={{marginBottom:20}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <span style={{width:10,height:10,borderRadius:"50%",background:"#7C3AED",display:"inline-block"}}/>
+                          <span style={{fontSize:14,fontWeight:800,color:"#7C3AED"}}>🍽 {barName}</span>
+                        </div>
+                        <LCard>
+                          {bp.map((p,i)=>{
+                            const z=zoneOf(p.zone)
+                            return (
+                              <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto",
+                                alignItems:"center",gap:12,padding:"14px 0",
+                                borderBottom:i<bp.length-1?`1px solid ${C.border}`:"none"}}>
+                                <div>
+                                  <div style={{fontSize:16,fontWeight:700,color:C.text}}>{p.name}</div>
+                                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
+                                    <span style={{fontSize:12,padding:"2px 10px",borderRadius:10,
+                                      background:z.color+"20",color:z.color,fontWeight:700}}>{z.name}</span>
+                                    <SBadge val={p[round]||0} min={p.min}/>
+                                    <span style={{fontSize:12,color:C.textMute}}>{p.unit}</span>
+                                  </div>
+                                </div>
+                                <QBox value={p[round]||0} onChange={v=>updProd(p.id,round,v)}/>
                               </div>
-                            </div>
-                            <QBox value={p[round]||0} onChange={v=>updProd(p.id,round,v)}/>
-                          </div>
-                        )
-                      })
-                  }
-                </LCard>
+                            )
+                          })}
+                        </LCard>
+                      </div>
+                    )
+                  })
+                })()}
+                {filteredProds.filter(p=>closeBar==="all"||(p.bar||"")===closeBar).length===0 && <Empty/>}
                 <BigBtn color={C.line} onClick={()=>{
                   const now=new Date()
                   const timeStr=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
